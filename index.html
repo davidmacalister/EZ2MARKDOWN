@@ -3,7 +3,7 @@
 <head>
 	<meta charset="utf-8" />
 	<meta name="viewport" content="width=device-width,initial-scale=1" />
-	<title>Source BR - HUB</title>
+	<title data-i18n-text="app.title">Source BR - HUB</title>
 	<link rel="stylesheet" href="style.css" />
 	<link rel="icon" type="image/png" href="icon.svg">
 </head>
@@ -15,15 +15,24 @@
 			</div>
 			<nav class="controls">
 				<input id="folderInput" type="file" webkitdirectory directory multiple style="display:none" />
-				<button id="openBtn" title="Abrir pasta (Ctrl+O)">Abrir pasta</button>
-				<button id="collapseBtn" title="Colapsar barra">⇤</button>
+				<button id="openBtn" data-i18n-text="buttons.openFolder" title="Abrir pasta (Ctrl+O)">Abrir pasta</button>
+				<button id="collapseBtn" data-i18n-text="buttons.collapseSidebar" title="Colapsar barra">⇤</button>
 			</nav>
 			<div class="explorer">
-				<div class="explorer-title">Explorer</div>
+				<div class="explorer-title" data-i18n-text="explorer.title">Explorer</div>
 				<div class="explorer-search">
-					<input id="explorerSearch" type="search" placeholder="Pesquisar arquivos..." aria-label="Pesquisar arquivos" />
+					<input
+						id="explorerSearch"
+						type="search"
+						placeholder="Pesquisar arquivos..."
+						aria-label="Pesquisar arquivos"
+						data-i18n-placeholder="explorer.searchPlaceholder"
+						data-i18n-aria-label="explorer.searchAriaLabel"
+					/>
 				</div>
-				<ul id="fileList"><li class="empty">Nenhum arquivo</li></ul>
+				<ul id="fileList">
+					<li class="empty" data-i18n-text="explorer.empty">Nenhum arquivo</li>
+				</ul>
 			</div>
 		</aside>
 
@@ -35,65 +44,114 @@
 				<div class="tabs"><span id="currentFilename">untitled.md</span></div>
 				<div class="header-actions">
 					<!-- indicador de conexão: clicável para tentar conectar/abrir seletor -->
-					<div id="connStatus" class="conn-status" title="Status da conexão (clicar para conectar)">
-						<span class="dot"></span>
-						<span class="label">Desconectado</span>
-					</div>
+						<div
+							id="connStatus"
+							class="conn-status"
+							title="Status da conexão (clicar para conectar)"
+							data-i18n-title="status.connectionTooltip"
+						>
+							<span class="dot"></span>
+							<span class="label" data-i18n-text="status.disconnected">Desconectado</span>
+						</div>
 					<!-- botão global para mostrar/ocultar editor bruto -->
-					<button id="toggleRawBtn" title="Mostrar/Esconder editor bruto">👁</button>
+					<button
+						id="toggleRawBtn"
+						title="Mostrar/Esconder editor bruto"
+						data-i18n-title="buttons.toggleRaw"
+					>👁</button>
 				</div>
 			</header>
 
 			<section class="preview-pane">
-				<div id="preview" class="preview" title="Preview WYSIWYG — arraste arquivos da barra lateral para inserir"></div>
+				<div
+					id="preview"
+					class="preview"
+					title="Preview WYSIWYG — arraste arquivos da barra lateral para inserir"
+					data-i18n-title="preview.title"
+				></div>
 			</section>
 		</main>
 	</div>
 
 	<!-- save progress (top fixed) -->
-	<div id="saveProgress" class="save-progress hidden" aria-hidden="true">
-		<div class="save-progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100"></div>
-		<div class="save-progress-text">Salvando...</div>
+	<div
+		id="saveProgress"
+		class="save-progress hidden"
+		aria-hidden="true"
+	>
+		<div
+			class="save-progress-bar"
+			role="progressbar"
+			aria-valuemin="0"
+			aria-valuemax="100"
+		></div>
+		<div class="save-progress-text" data-i18n-text="saveProgress.text">Salvando...</div>
 	</div>
 
 	<!-- connect prompt (show when Ctrl+S but not connected) -->
-	<div id="connectPrompt" class="connect-prompt hidden" role="dialog" aria-modal="true" aria-hidden="true">
+	<div
+		id="connectPrompt"
+		class="connect-prompt hidden"
+		role="dialog"
+		aria-modal="true"
+		aria-hidden="true"
+	>
 		<div class="connect-prompt-content">
-			<div class="cp-title">Servidor local não conectado</div>
-			<div class="cp-body">Para salvar no disco local você precisa conectar ao servidor local. Deseja conectar agora?</div>
+			<div class="cp-title" data-i18n-text="connectPrompt.title">Servidor local não conectado</div>
+			<div class="cp-body" data-i18n-text="connectPrompt.body">
+				Para salvar no disco local você precisa conectar ao servidor local. Deseja conectar agora?
+			</div>
 			<div class="cp-actions">
-				<button id="cpConnectBtn">Conectar</button>
-				<button id="cpCancelBtn">Cancelar</button>
+				<button id="cpConnectBtn" data-i18n-text="connectPrompt.connect">Conectar</button>
+				<button id="cpCancelBtn" data-i18n-text="connectPrompt.cancel">Cancelar</button>
 			</div>
 		</div>
 	</div>
 
 	<!-- painel raw (overlay) -->
-	<div id="rawPanel" class="raw-panel hidden" role="dialog" aria-modal="true">
+	<div
+		id="rawPanel"
+		class="raw-panel hidden"
+		role="dialog"
+		aria-modal="true"
+	>
 		<div class="raw-panel-content">
 			<div class="raw-panel-header">
-				<span>Editor — texto bruto</span>
-				<button id="rawClose" title="Fechar">✕</button>
+				<span data-i18n-text="rawPanel.title">Editor — texto bruto</span>
+				<button
+					id="rawClose"
+					title="Fechar"
+					data-i18n-title="buttons.close"
+				>✕</button>
 			</div>
 			<textarea id="editor" spellcheck="false"></textarea>
 			<div class="raw-panel-actions">
-				<button id="rawCancel">Cancelar</button>
-				<button id="rawApply">Aplicar</button>
+				<button id="rawCancel" data-i18n-text="rawPanel.cancel">Cancelar</button>
+				<button id="rawApply" data-i18n-text="rawPanel.apply">Aplicar</button>
 			</div>
 		</div>
 	</div>
 
 	<!-- modal célula (editar conteúdo HTML/texto da célula) -->
-	<div id="modal" class="modal hidden" role="dialog" aria-modal="true">
+	<div
+		id="modal"
+		class="modal hidden"
+		role="dialog"
+		aria-modal="true"
+	>
 		<div class="modal-content">
 			<div class="modal-header">
-				<span>Editar célula</span>
-				<button id="modalClose" title="Fechar">✕</button>
+				<span data-i18n-text="modal.title">Editar célula</span>
+				<button
+					id="modalClose"
+					title="Fechar"
+					data-i18n-title="buttons.close"
+				>✕</button>
 			</div>
 			<textarea id="modalEditor" spellcheck="false"></textarea>
 			<div class="modal-actions">
-				<button id="modalCancel">Cancelar</button>
-				<button id="modalApply">Aplicar</button>
+				<button id="modalCancel" data-i18n-text="modal.cancel">Cancelar</button>
+				<button id="modalApply" data-i18n-text="modal.apply">Aplicar</button>
 			</div>
 		</div>
 	</div>
@@ -104,12 +162,55 @@
 	<script>
 		// Aviso ao tentar sair da página
 		window.addEventListener('beforeunload', function (e) {
-			// Alguns navegadores ignoram a mensagem customizada e mostram o texto padrão
 			const message = 'Sair do site? É possível que alterações feitas não sejam salvas.';
 			e.preventDefault();
 			e.returnValue = message;
 			return message;
 		});
+
+		// Carrega textos da interface a partir de JSON
+		(async function loadTranslations() {
+			try {
+				const res = await fetch('i18n/pt-BR.json');
+				if (!res.ok) return;
+				const dict = await res.json();
+
+				// Helper para acessar chaves aninhadas, ex: "explorer.title"
+				const get = (obj, path) => path.split('.').reduce((o, k) => (o ? o[k] : undefined), obj);
+
+				// data-i18n-text => textContent
+				document.querySelectorAll('[data-i18n-text]').forEach(el => {
+					const key = el.getAttribute('data-i18n-text');
+					const v = get(dict, key);
+					if (v != null) el.textContent = v;
+				});
+
+				// data-i18n-placeholder => placeholder
+				document.querySelectorAll('[data-i18n-placeholder]').forEach(el => {
+					const key = el.getAttribute('data-i18n-placeholder');
+					const v = get(dict, key);
+					if (v != null) el.setAttribute('placeholder', v);
+				});
+
+				// data-i18n-title => title
+				document.querySelectorAll('[data-i18n-title]').forEach(el => {
+					const key = el.getAttribute('data-i18n-title');
+					const v = get(dict, key);
+					if (v != null) el.setAttribute('title', v);
+				});
+
+				// data-i18n-aria-label => aria-label
+				document.querySelectorAll('[data-i18n-aria-label]').forEach(el => {
+					const key = el.getAttribute('data-i18n-aria-label');
+					const v = get(dict, key);
+					if (v != null) el.setAttribute('aria-label', v);
+				});
+			} catch (e) {
+				// falha silenciosa se JSON não estiver disponível
+				console.error('Falha ao carregar traduções', e);
+			}
+		})();
 	</script>
 </body>
 </html>
+``` 

@@ -1,0 +1,43 @@
+{
+  "app": {
+    "title": "Source BR - HUB"
+  },
+  "buttons": {
+    "openFolder": "Abrir pasta",
+    "collapseSidebar": "⇤",
+    "toggleRaw": "Mostrar/Esconder editor bruto",
+    "close": "Fechar"
+  },
+  "explorer": {
+    "title": "Explorer",
+    "searchPlaceholder": "Pesquisar arquivos...",
+    "searchAriaLabel": "Pesquisar arquivos",
+    "empty": "Nenhum arquivo"
+  },
+  "status": {
+    "connectionTooltip": "Status da conexão (clicar para conectar)",
+    "disconnected": "Desconectado"
+  },
+  "preview": {
+    "title": "Preview"
+  },
+  "saveProgress": {
+    "text": "Salvando..."
+  },
+  "connectPrompt": {
+    "title": "Servidor local não conectado",
+    "body": "Para salvar no disco local você precisa conectar ao servidor local. Deseja conectar agora?",
+    "connect": "Conectar",
+    "cancel": "Cancelar"
+  },
+  "rawPanel": {
+    "title": "Editor",
+    "cancel": "Cancelar",
+    "apply": "Aplicar"
+  },
+  "modal": {
+    "title": "Editar célula",
+    "cancel": "Cancelar",
+    "apply": "Aplicar"
+  }
+}
