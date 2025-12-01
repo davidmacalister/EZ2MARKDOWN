@@ -5,7 +5,7 @@
   "buttons": {
     "openFolder": "Abrir pasta",
     "collapseSidebar": "⇤",
-    "toggleRaw": "Mostrar/Esconder editor bruto",
+    "toggleRaw": "Mostrar/Esconder editor",
     "close": "Fechar"
   },
   "explorer": {

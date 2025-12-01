@@ -173,9 +173,17 @@
 			try {
 				const res = await fetch('i18n/pt-BR.json');
 				if (!res.ok) return;
-				const dict = await res.json();
 
-				// Helper para acessar chaves aninhadas, ex: "explorer.title"
+				// Garante que o conteúdo seja JSON válido
+				const text = await res.text();
+				let dict;
+				try {
+					dict = JSON.parse(text);
+				} catch (err) {
+					console.error('pt-BR.json não é JSON válido:', err);
+					return;
+				}
+
 				const get = (obj, path) => path.split('.').reduce((o, k) => (o ? o[k] : undefined), obj);
 
 				// data-i18n-text => textContent
@@ -206,11 +214,9 @@
 					if (v != null) el.setAttribute('aria-label', v);
 				});
 			} catch (e) {
-				// falha silenciosa se JSON não estiver disponível
 				console.error('Falha ao carregar traduções', e);
 			}
 		})();
 	</script>
 </body>
 </html>
-``` 
