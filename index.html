@@ -3,13 +3,16 @@
 <head>
 	<meta charset="utf-8" />
 	<meta name="viewport" content="width=device-width,initial-scale=1" />
-	<title>EZ2 — Editor WYSIWYG Markdown/HTML</title>
+	<title>Source BR - HUB</title>
 	<link rel="stylesheet" href="style.css" />
+	<link rel="icon" type="image/png" href="icon.svg">
 </head>
 <body>
 	<div id="app" class="theme-dark">
 		<aside class="sidebar">
-			<div class="logo">EZ2 • Markdown</div>
+			<div class="logo">
+				<img src="icon.svg" alt="Logo" style="height: 40px;">
+			</div>
 			<nav class="controls">
 				<input id="folderInput" type="file" webkitdirectory directory multiple style="display:none" />
 				<button id="openBtn" title="Abrir pasta (Ctrl+O)">Abrir pasta</button>
@@ -31,16 +34,13 @@
 			<header class="editor-header">
 				<div class="tabs"><span id="currentFilename">untitled.md</span></div>
 				<div class="header-actions">
-						<!-- indicador de conexão: clicável para tentar conectar/abrir seletor -->
-						<div id="connStatus" class="conn-status" title="Status da conexão (clicar para conectar)">
-							<span class="dot"></span>
-							<span class="label">Desconectado</span>
-						</div>
-					<!-- botão global para adicionar linha na tabela selecionada -->
-					<button id="addRowBtn" title="Adicionar linha na tabela selecionada">+ Linha</button>
+					<!-- indicador de conexão: clicável para tentar conectar/abrir seletor -->
+					<div id="connStatus" class="conn-status" title="Status da conexão (clicar para conectar)">
+						<span class="dot"></span>
+						<span class="label">Desconectado</span>
+					</div>
+					<!-- botão global para mostrar/ocultar editor bruto -->
 					<button id="toggleRawBtn" title="Mostrar/Esconder editor bruto">👁</button>
-					<!-- novo: conectar ao salvador local (Python) -->
-					<button id="connectLocalBtn" title="Conectar ao salvador local">🔌</button>
 				</div>
 			</header>
 

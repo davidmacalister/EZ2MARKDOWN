@@ -1,10 +1,11 @@
+/* paleta principal ajustada para base 131e19 */
 :root{
-	--bg:#0d1117;
-	--panel:#0b1220;
+	--bg:#131e19;         /* cor predominante */
+	--panel:#0b120f;      /* painel levemente mais claro */
 	--muted:#c9d1d9;
-	--accent:#58a6ff;
-	--editor-bg:#010409;
-	--preview-bg:#0d1117;
+	--accent:#4b7a4f;     /* verde escuro ainda em harmonia com 131e19 */
+	--editor-bg:#0f1914;  /* próximo de 131e19, um pouco mais escuro */
+	--preview-bg:#040706; /* fundo do preview mais escuro (ajustado) */
 	--muted-dim:#8b949e;
 }
 *{box-sizing:border-box}
@@ -133,13 +134,18 @@ body{margin:0;font-family:Inter, "Segoe UI", Roboto, Arial, sans-serif;backgroun
 .preview{flex:1;padding:20px;background:var(--preview-bg);overflow:auto;color:var(--muted)}
 .preview h1,h2,h3{color:var(--muted)}
 .preview pre{background:#0b1220;padding:10px;border-radius:6px;overflow:auto}
-.preview code{background:#011627;padding:2px 6px;border-radius:6px;color:#b8e0ff}
+.preview code{
+	background:#02160a;
+	padding:2px 6px;
+	border-radius:6px;
+	color:#a7f5ad; /* baseado em 67f56d */
+}
 .preview table{width:100%;border-collapse:collapse;margin:12px 0;border:1px solid rgba(255,255,255,0.04)}
 .preview table th,.preview table td{padding:8px;border:1px solid rgba(255,255,255,0.03)}
 .preview table td[contenteditable], .preview table th[contenteditable]{background:rgba(255,255,255,0.01)}
 .preview .table-add-col{position:absolute;right:12px;top:8px;background:var(--panel);border:1px solid rgba(255,255,255,0.04);color:var(--muted);padding:4px 6px;border-radius:4px;cursor:pointer}
 .preview table tbody tr.selected-row td{
-	background: rgba(88,166,255,0.06);
+	background: rgba(75,122,79,0.20); /* tom de verde escuro translúcido */
 }
 .raw-panel{position:fixed;inset:0;display:flex;align-items:flex-start;justify-content:flex-end;padding:40px;z-index:1200;pointer-events:auto}
 .raw-panel.hidden{display:none}
@@ -262,12 +268,12 @@ button:focus, .controls button:focus, .header-actions button:focus,
 
 /* destaque para botões primários (aplicar) */
 #rawApply, #modalApply {
-	background: linear-gradient(180deg, var(--accent), #3e8fed);
+	background: linear-gradient(180deg, var(--accent), #3a5d3c);
 	color: #031026;
 	border: 0;
-	box-shadow: 0 8px 22px rgba(88,166,255,0.06);
+	box-shadow: 0 8px 22px rgba(75,122,79,0.18);
 }
-#rawApply:hover, #modalApply:hover { box-shadow: 0 12px 30px rgba(88,166,255,0.09); }
+#rawApply:hover, #modalApply:hover { box-shadow: 0 12px 30px rgba(75,122,79,0.26); }
 
 /* cancelar: leve outline */
 #rawCancel, #modalCancel {
@@ -332,7 +338,7 @@ pre::-webkit-scrollbar-thumb,
 textarea::-webkit-scrollbar-thumb:hover,
 pre::-webkit-scrollbar-thumb:hover,
 #fileList::-webkit-scrollbar-thumb:hover {
-	background: rgba(255,255,255,0.08);
+	background: rgba(103,245,109,0.35); /* verde claro ao hover */
 	transform: translateY(-1px);
 }
 
@@ -597,7 +603,7 @@ pre::-webkit-scrollbar-thumb:hover,
 	transition: background .12s ease, transform .08s;
 }
 .audio-picker::-webkit-scrollbar-thumb:hover {
-	background: rgba(255,255,255,0.08);
+	background: rgba(103,245,109,0.35);
 	transform: translateY(-1px);
 }
 
@@ -635,9 +641,9 @@ pre::-webkit-scrollbar-thumb:hover,
 	position:relative;
 }
 .save-progress-bar::after{
-	content:'';
+	content:''; 
 	position:absolute;left:0;top:0;bottom:0;width:0%;
-	background:linear-gradient(90deg,var(--accent),#3e8fed);
+	background:linear-gradient(90deg,var(--accent),#67f56d);
 	transition: width 240ms linear;
 	border-radius:6px;
 }
@@ -687,13 +693,36 @@ pre::-webkit-scrollbar-thumb:hover,
 	color:var(--muted);
 }
 .conn-status .dot{
-	width:10px;height:10px;border-radius:50%;background: #c0392b; /* vermelho por padrão */
+	width:10px;
+	height:10px;
+	border-radius:50%;
+	background: #ff0000; /* vermelho quando desconectado */
 	box-shadow:0 2px 6px rgba(0,0,0,0.35) inset;
 	flex:0 0 10px;
 }
-.conn-status.connected .dot{ background: #16a34a; box-shadow: 0 0 8px rgba(22,163,74,0.18); }
-.conn-status.connecting .dot{ background: #f59e0b; box-shadow: 0 0 6px rgba(245,158,11,0.12); }
-.conn-status .label{ font-size:13px; color:var(--muted); white-space:nowrap; max-width:160px; overflow:hidden; text-overflow:ellipsis; }
+.conn-status.connected .dot{
+	background: #00ff00; /* verde quando conectado */
+	box-shadow: 0 0 8px rgba(0,255,0,0.35);
+}
+.conn-status.connecting .dot{
+	background: #ffff00; /* amarelo para “conectando” / PAUSADO */
+	box-shadow: 0 0 6px rgba(255,255,0,0.30);
+}
+.conn-status .label{
+	font-size:13px;
+	color:var(--muted);
+	white-space:nowrap;
+	max-width:160px;
+	overflow:hidden;
+	text-overflow:ellipsis;
+}
+
+/* hover/active */
+.conn-status:hover{
+	background: rgba(255,255,255,0.01);
+	color:var(--accent);
+	transform: translateY(-1px);
+}
 
 /* hover/active */
 .conn-status:hover{ background: rgba(255,255,255,0.01); color:var(--accent); transform: translateY(-1px); }
