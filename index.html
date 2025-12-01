@@ -101,5 +101,15 @@
 	<script src="https://cdn.jsdelivr.net/npm/markdown-it@13.0.1/dist/markdown-it.min.js"></script>
 	<script src="https://cdn.jsdelivr.net/npm/turndown@7.1.1/dist/turndown.min.js"></script>
 	<script src="app.js"></script>
+	<script>
+		// Aviso ao tentar sair da página
+		window.addEventListener('beforeunload', function (e) {
+			// Alguns navegadores ignoram a mensagem customizada e mostram o texto padrão
+			const message = 'Sair do site? É possível que alterações feitas não sejam salvas.';
+			e.preventDefault();
+			e.returnValue = message;
+			return message;
+		});
+	</script>
 </body>
 </html>
