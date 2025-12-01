@@ -1,0 +1,699 @@
+:root{
+	--bg:#0d1117;
+	--panel:#0b1220;
+	--muted:#c9d1d9;
+	--accent:#58a6ff;
+	--editor-bg:#010409;
+	--preview-bg:#0d1117;
+	--muted-dim:#8b949e;
+}
+*{box-sizing:border-box}
+html,body,#app{height:100%}
+body{margin:0;font-family:Inter, "Segoe UI", Roboto, Arial, sans-serif;background:var(--bg);color:var(--muted);}
+
+/* layout */
+#app{display:flex;height:100vh;overflow:hidden}
+.sidebar{width:220px;background:var(--panel);padding:12px;display:flex;flex-direction:column;border-right:1px solid rgba(255,255,255,0.03);transition:width .18s ease}
+.logo{font-weight:700;color:var(--accent);margin-bottom:8px}
+.controls{display:flex;gap:8px;margin-bottom:12px;align-items:center}
+.controls button{background:transparent;border:1px solid rgba(255,255,255,0.03);color:var(--muted);padding:4px 6px;border-radius:6px;cursor:pointer;font-size:13px}
+.explorer{flex:1;overflow:auto}
+.explorer-title{font-size:12px;color:var(--muted-dim);margin-bottom:6px}
+#fileList{list-style:none;padding:0;margin:0}
+#fileList li{padding:6px 8px;border-radius:6px;color:var(--muted);font-size:13px;cursor:pointer}
+#fileList li:hover{background:rgba(255,255,255,0.02)}
+
+/* explorer improved styles */
+/* substituir `display:flex` nos li por block para que filhos apareçam em coluna */
+.explorer ul{list-style:none;padding-left:8px;margin:6px 0;display:block}
+.explorer li{padding:2px 4px;border-radius:4px;line-height:1.6;display:block;min-width:0} /* <-- change: block layout and min-width */
+.explorer li.folder{cursor:default}
+
+/* nova linha que contém toggle + label (mantém ambos sempre na mesma linha) */
+.explorer .folder-row{
+	display:flex;
+	align-items:center;
+	gap:6px;           /* menor gap */
+	padding:2px 6px;   /* menos padding vertical */
+	border-radius:4px; /* menos arredondado */
+	font-size:13px;
+}
+
+/* manter layout horizontal apenas no label do nó (ícone + nome) */
+.explorer .folder-label,
+.explorer a.file-link{
+	display:flex;
+	align-items:center;
+	gap:6px;
+	flex:1;
+	padding:2px 4px;
+	min-width:0; /* garantir que o link possa encolher dentro do li */
+}
+
+/* botão toggle (seta) */
+.explorer .folder-toggle{
+	width:16px;height:16px;border:0;background:transparent;color:var(--muted-dim);
+	display:inline-flex;align-items:center;justify-content:center;padding:0;margin:0;cursor:pointer;border-radius:4px;
+}
+.explorer .folder-toggle svg{
+	width:12px;height:12px;transition:transform .14s ease, color .14s ease;transform-origin:center;
+	transform: rotate(0deg); /* seta inicial (direita) */
+}
+.explorer .folder-toggle[aria-expanded="true"] svg,
+.explorer li:not(.collapsed) > .folder-toggle svg{
+	transform: rotate(90deg);
+}
+.explorer li.collapsed > .folder-toggle svg{transform:rotate(0deg)}
+.explorer li:not(.collapsed) > .folder-toggle svg{transform:rotate(90deg)}
+
+.explorer .folder-label .folder-icon{
+	font-size:13px;
+	color: var(--accent); /* usa accent definido em :root */
+	opacity:0.95;
+	display:inline-flex;
+	align-items:center;
+	justify-content:center;
+	width:16px;
+	height:16px;
+}
+.explorer a.file-link{color:var(--muted);text-decoration:none;display:flex;align-items:center;gap:6px;flex:1}
+.explorer a.file-link:hover{background:rgba(255,255,255,0.02);color:var(--accent)}
+.explorer .file-icon{opacity:0.9;color:var(--muted-dim);font-size:12px}
+
+/* children list controlled by li.collapsed: ficam abaixo e recuadas (indent) */
+.explorer li.collapsed > ul.children{display:none}
+.explorer ul.children{padding-left:12px;margin-top:4px;}
+
+/* small touch: show file name truncated */
+.explorer a.file-link span.name{
+	flex: 1 1 auto;
+	min-width: 0; /* essencial para que text-overflow funcione dentro de flex */
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+/* estado colapsado da sidebar (pequena, só ícones) */
+#app.sidebar-collapsed .sidebar{
+	width:56px;
+	padding:8px;
+}
+#app.sidebar-collapsed .logo{font-size:12px;text-align:center}
+#app.sidebar-collapsed .controls button:not(#collapseBtn){display:none}
+#app.sidebar-collapsed .explorer, 
+#app.sidebar-collapsed .explorer-title,
+#app.sidebar-collapsed #fileList li{display:none}
+/* mostrar apenas ícone/primeiro nível quando colapsado (se quiser customizar depois) */
+#app.sidebar-collapsed .sidebar .logo::after{
+	content:"";display:block;height:0;margin-top:4px;
+}
+
+/* resizer (separador) entre sidebar e main */
+.sidebar-resizer{
+	width:6px;
+	flex:0 0 6px;
+	cursor:col-resize;
+	height:100%;
+	z-index:30;
+	touch-action:none; /* evita scroll durante drag em touch */
+	background:linear-gradient(90deg, rgba(255,255,255,0.02), rgba(255,255,255,0.06), rgba(255,255,255,0.02));
+	transition:background .12s;
+}
+.sidebar-resizer:hover{ background:linear-gradient(90deg, rgba(255,255,255,0.03), rgba(255,255,255,0.08), rgba(255,255,255,0.03)); }
+
+/* quando arrastando, aplicar classe para remover transição visual da sidebar */
+#app.sidebar-resizing .sidebar{ transition: none !important; }
+
+/* main */
+.main{flex:1;display:flex;flex-direction:column;min-width:0}
+.editor-header{height:48px;background:var(--panel);border-bottom:1px solid rgba(255,255,255,0.03);display:flex;align-items:center;padding:0 12px;justify-content:space-between}
+.header-actions button{background:transparent;border:0;color:var(--muted);font-size:18px;cursor:pointer;padding:6px;border-radius:6px}
+.header-actions button:hover{background:rgba(255,255,255,0.02)}
+.preview-pane{flex:1;display:flex;flex-direction:column;overflow:auto}
+.preview{flex:1;padding:20px;background:var(--preview-bg);overflow:auto;color:var(--muted)}
+.preview h1,h2,h3{color:var(--muted)}
+.preview pre{background:#0b1220;padding:10px;border-radius:6px;overflow:auto}
+.preview code{background:#011627;padding:2px 6px;border-radius:6px;color:#b8e0ff}
+.preview table{width:100%;border-collapse:collapse;margin:12px 0;border:1px solid rgba(255,255,255,0.04)}
+.preview table th,.preview table td{padding:8px;border:1px solid rgba(255,255,255,0.03)}
+.preview table td[contenteditable], .preview table th[contenteditable]{background:rgba(255,255,255,0.01)}
+.preview .table-add-col{position:absolute;right:12px;top:8px;background:var(--panel);border:1px solid rgba(255,255,255,0.04);color:var(--muted);padding:4px 6px;border-radius:4px;cursor:pointer}
+.preview table tbody tr.selected-row td{
+	background: rgba(88,166,255,0.06);
+}
+.raw-panel{position:fixed;inset:0;display:flex;align-items:flex-start;justify-content:flex-end;padding:40px;z-index:1200;pointer-events:auto}
+.raw-panel.hidden{display:none}
+.raw-panel .raw-panel-content{pointer-events:all;width:70%;max-width:900px;height:80vh;background:var(--panel);border-radius:8px;padding:12px;display:flex;flex-direction:column}
+#editor{flex:1;background:var(--editor-bg);color:var(--muted);border-radius:6px;border:1px solid rgba(255,255,255,0.03);padding:12px;font-family:Consolas, monospace}
+.modal{position:fixed;inset:0;background:rgba(2,6,23,0.6);display:flex;align-items:center;justify-content:center;z-index:1300}
+.modal.hidden{display:none}
+.modal-content{width:80%;max-width:800px;background:var(--panel);border-radius:8px;padding:12px;box-shadow:0 8px 40px rgba(2,6,23,0.7);display:flex;flex-direction:column}
+.modal-header{display:flex;justify-content:space-between;align-items:center;color:var(--muted)}
+/* responsive */
+@media (max-width:900px){ .sidebar{display:none} .raw-panel .raw-panel-content{width:100%;height:90vh} }
+/* imagens / audio styling */
+.preview img{max-width:100%;height:auto;border-radius:6px}
+.preview audio{display:block;width:100%;margin:8px 0}
+
+/* hint discreto para edição — escondido por padrão, aparece ao hover */
+.preview .block{
+	/* ...existing styles... */
+	position: relative; /* necessário para posicionar o hint */
+}
+.preview .block .editHint{
+	display: none;
+	position: absolute;
+	right: 8px;
+	top: 6px;
+	font-size: 12px;
+	color: rgba(255,255,255,0.7);
+	background: rgba(0,0,0,0.12);
+	padding: 2px 6px;
+	border-radius: 6px;
+	pointer-events: none;
+	white-space: nowrap;
+	z-index: 5;
+}
+.preview .block:hover .editHint{
+	display: inline-block;
+}
+
+/* menu de contexto customizado no preview */
+.context-menu{
+	position:fixed;
+	z-index:2200;
+	min-width:160px;
+	background:var(--panel);
+	color:var(--muted);
+	border:1px solid rgba(255,255,255,0.04);
+	box-shadow:0 6px 24px rgba(2,6,23,0.7);
+	border-radius:6px;
+	overflow:hidden;
+}
+.context-menu.hidden{display:none}
+.context-menu .cm-item{
+	padding:8px 12px;
+	cursor:pointer;
+	font-size:13px;
+	white-space:nowrap;
+}
+.context-menu .cm-item:hover{background:rgba(255,255,255,0.02); color:var(--accent)}
+
+/* explorer search */
+.explorer .explorer-search{
+	margin:6px 0 8px 0;
+}
+.explorer .explorer-search input{
+	width:100%;
+	padding:6px 8px;
+	border-radius:6px;
+	border:1px solid rgba(255,255,255,0.04);
+	background: rgba(255,255,255,0.01);
+	color:var(--muted);
+	font-size:13px;
+}
+
+/* explorer context menu (arquivo) */
+.explorer-context-menu{
+	position:fixed;
+	z-index:2400;
+	min-width:160px;
+	background:var(--panel);
+	color:var(--muted);
+	border:1px solid rgba(255,255,255,0.04);
+	box-shadow:0 6px 24px rgba(2,6,23,0.7);
+	border-radius:6px;
+	overflow:hidden;
+}
+.explorer-context-menu.hidden{display:none}
+.explorer-context-menu .ecm-item{ padding:8px 12px; cursor:pointer; font-size:13px; white-space:nowrap; }
+.explorer-context-menu .ecm-item:hover{ background: rgba(255,255,255,0.02); color:var(--accent); }
+
+/* ===== UI buttons: padronização visual ===== */
+button, .controls button, .header-actions button, .crowbar button,
+.raw-panel .raw-panel-actions button, .modal .modal-actions button,
+.explorer .folder-toggle, .explorer a.file-link {
+	appearance: none;
+	-webkit-appearance: none;
+	background: transparent;
+	border: 1px solid rgba(255,255,255,0.04);
+	color: var(--muted);
+	padding: 6px 8px;
+	border-radius: 8px;
+	font-size: 13px;
+	cursor: pointer;
+	transition: background .12s ease, transform .08s ease, box-shadow .12s ease;
+}
+button:hover, .controls button:hover, .header-actions button:hover,
+.raw-panel .raw-panel-actions button:hover, .modal .modal-actions button:hover,
+.explorer .folder-toggle:hover, .explorer a.file-link:hover {
+	background: rgba(255,255,255,0.03);
+	color: var(--accent);
+	transform: translateY(-1px);
+}
+button:active, .controls button:active, .header-actions button:active {
+	transform: translateY(0);
+}
+button:focus, .controls button:focus, .header-actions button:focus,
+.raw-panel .raw-panel-actions button:focus, .modal .modal-actions button:focus {
+	outline: 3px solid rgba(88,166,255,0.10);
+	outline-offset: 2px;
+}
+
+/* destaque para botões primários (aplicar) */
+#rawApply, #modalApply {
+	background: linear-gradient(180deg, var(--accent), #3e8fed);
+	color: #031026;
+	border: 0;
+	box-shadow: 0 8px 22px rgba(88,166,255,0.06);
+}
+#rawApply:hover, #modalApply:hover { box-shadow: 0 12px 30px rgba(88,166,255,0.09); }
+
+/* cancelar: leve outline */
+#rawCancel, #modalCancel {
+	background: transparent;
+	border: 1px solid rgba(255,255,255,0.04);
+}
+
+/* pequenos ícones/ações: reduzir padding */
+.header-actions button { padding:6px; border-radius:6px; }
+
+/* estados desabilitados */
+button[disabled], .controls button[disabled] {
+	opacity: 0.45;
+	cursor: not-allowed;
+	transform: none;
+}
+
+/* ===== Scrollbars (WebKit) ===== */
+/* padrão para painéis com overflow */
+.explorer, .preview, .raw-panel .raw-panel-content, .modal .modal-content, textarea, pre, #fileList {
+	/* garante que o navegador exiba a barra quando necessário */
+	overflow: auto;
+}
+
+/* webkit */
+.explorer::-webkit-scrollbar,
+.preview::-webkit-scrollbar,
+.raw-panel .raw-panel-content::-webkit-scrollbar,
+.modal .modal-content::-webkit-scrollbar,
+textarea::-webkit-scrollbar,
+pre::-webkit-scrollbar,
+#fileList::-webkit-scrollbar {
+	width:12px;
+	height:12px;
+}
+.explorer::-webkit-scrollbar-track,
+.preview::-webkit-scrollbar-track,
+.raw-panel .raw-panel-content::-webkit-scrollbar-track,
+.modal .modal-content::-webkit-scrollbar-track,
+textarea::-webkit-scrollbar-track,
+pre::-webkit-scrollbar-track,
+#fileList::-webkit-scrollbar-track {
+	background: transparent;
+}
+.explorer::-webkit-scrollbar-thumb,
+.preview::-webkit-scrollbar-thumb,
+.raw-panel .raw-panel-content::-webkit-scrollbar-thumb,
+.modal .modal-content::-webkit-scrollbar-thumb,
+textarea::-webkit-scrollbar-thumb,
+pre::-webkit-scrollbar-thumb,
+#fileList::-webkit-scrollbar-thumb {
+	background: rgba(255,255,255,0.035);
+	border-radius:10px;
+	border: 3px solid transparent; /* space for rounded look */
+	background-clip: padding-box;
+	transition: background .12s ease, transform .08s;
+}
+.explorer::-webkit-scrollbar-thumb:hover,
+.preview::-webkit-scrollbar-thumb:hover,
+.raw-panel .raw-panel-content::-webkit-scrollbar-thumb:hover,
+.modal .modal-content::-webkit-scrollbar-thumb:hover,
+textarea::-webkit-scrollbar-thumb:hover,
+pre::-webkit-scrollbar-thumb:hover,
+#fileList::-webkit-scrollbar-thumb:hover {
+	background: rgba(255,255,255,0.08);
+	transform: translateY(-1px);
+}
+
+/* ===== Scrollbars (Firefox) ===== */
+.explorer, .preview, .raw-panel .raw-panel-content, .modal .modal-content, textarea, pre, #fileList {
+	scrollbar-width: thin;
+	scrollbar-color: rgba(255,255,255,0.04) transparent;
+}
+
+/* acessibilidade: foco no container (evidenciar thumb) */
+.explorer:focus-within, .preview:focus-within, .raw-panel .raw-panel-content:focus-within, .modal .modal-content:focus-within {
+	outline: none;
+}
+
+/* mobile: pequenas áreas de hit para scrollbar */
+@media (max-width:600px){
+	.explorer::-webkit-scrollbar,
+	.preview::-webkit-scrollbar { width:8px; height:8px; }
+}
+
+/* ===== refinamentos finais ===== */
+/* reduzir contraste de bordas gerais para UI mais suave */
+.sidebar, .modal-content, .raw-panel .raw-panel-content, .preview {
+	border-color: rgba(255,255,255,0.02);
+}
+
+/* garantir botões internos do explorer sem sobrescrita extra */
+.explorer a.file-link, .explorer .folder-row { background: transparent; border: none; }
+
+/* ícone de pasta (setinha SVG) usado no label do nó */
+.explorer .folder-icon{
+	display:inline-flex;
+	align-items:center;
+	justify-content:center;
+	width:16px;
+	height:16px;
+	color:var(--muted-dim);
+}
+.explorer .folder-icon svg{
+	width:12px;
+	height:12px;
+	stroke:currentColor;
+	fill:none;
+	stroke-width:2;
+	stroke-linecap:round;
+	stroke-linejoin:round;
+}
+
+/* garantir que a seta do toggle também desenhe com stroke visível */
+.explorer .folder-toggle svg{
+	stroke: currentColor;
+	stroke-width:2;
+	fill:none;
+}
+
+/* remover qualquer marcador (bolinha) no explorer / file list */
+.explorer, #fileList, .explorer ul, #fileList ul {
+	list-style: none !important;
+	margin: 0;
+	padding-left: 0 !important;
+}
+
+/* garantir que cada li não mostre marker (compatibilidade com ::marker) */
+.explorer li, #fileList li {
+	list-style: none !important;
+}
+
+/* esconder o ::marker para navegadores que o exibem */
+.explorer li::marker, #fileList li::marker,
+.explorer ul li::marker, #fileList ul li::marker {
+	content: '' !important;
+	display: none !important;
+}
+
+/* override final: remover círculo do botão toggle (deve vir APÓS a regra global de button) */
+.explorer .folder-toggle{
+	border: none !important;
+	background: transparent !important;
+	box-shadow: none !important;
+	padding: 0 !important;
+	width: 20px !important;
+	height: 20px !important;
+	display: inline-flex !important;
+	align-items: center !important;
+	justify-content: center !important;
+	color: var(--muted-dim) !important;
+}
+
+/* evitar indicador visual extra ao focar (ou usar outline mais discreto se preferir) */
+.explorer .folder-toggle:focus,
+.explorer .folder-toggle:focus-visible{
+	outline: none !important;
+	box-shadow: none !important;
+}
+
+/* handle de arrastar da linha da tabela */
+.md-table td.row-handle {
+	width:32px;
+	text-align:center;
+	cursor: grab;
+	user-select: none;
+	color: var(--muted-dim);
+	padding: 4px 6px;
+	vertical-align: middle;
+	background: transparent;
+}
+
+/* ícone dentro do handle (pode ser :: ou SVG) */
+.md-table td.row-handle .row-handle-ico{
+	font-weight:700;
+	opacity:0.8;
+}
+
+/* estado durante arraste */
+.md-table tr.dragging td.row-handle,
+.md-table tr.dragging { opacity: 0.65; }
+.md-table td.row-handle:active { cursor: grabbing; }
+
+/* indicação visual ao passar sobre linha alvo */
+.md-table tr.drop-target {
+	outline: 2px dashed rgba(88,166,255,0.14);
+	transform: translateY(0);
+}
+
+/* quando a tabela tem handles, reduzir padding da célula para alinhar melhor */
+.md-table.draggable-rows td { padding-left: 6px; padding-right:6px; }
+
+/* layout para handles externos + tabela */
+.table-with-handles{
+	display:flex;
+	align-items:flex-start;
+	gap:8px;
+	/* reduz overflow lateral indesejado */
+	overflow:visible;
+}
+
+/* coluna de handles (fora da tabela) */
+.table-with-handles .handles-col{
+	/* agora posicionamento relativo para conter handles posicionados absolutamente */
+	position: relative;
+	display:block;
+	/* padding-top será calculado dinamicamente para alinhar com thead */
+	padding-top:0;
+	/* fixa largura do gutter de handles */
+	width:32px;
+	flex:0 0 32px;
+	/* sem gap para evitar deslocamentos entre handles */
+	gap: 0;
+	/* garantir que não force layout extra (altura controlada via JS) */
+	overflow: visible;
+}
+
+/* cada handle (fora da tabela) - agora absolute para posicionamento preciso */
+.table-with-handles .handles-col .row-handle{
+	/* passar para absolute; JS controla top/height */
+	position: absolute;
+	left: 0;
+	display:block;
+	margin: 0;
+	align-items:center;
+	justify-content:center;
+	width:32px;
+	box-sizing: border-box;
+	padding: 4px 6px;
+	cursor:grab;
+	user-select:none;
+	color:var(--muted-dim);
+	background: transparent;
+	overflow:hidden;
+	min-height:28px; /* segurança caso JS não execute imediatamente */
+	transition: top .08s ease, height .12s ease; /* animação suave opcional */
+}
+.table-with-handles .handles-col .row-handle .row-handle-ico{
+	display:inline-block;
+	width:100%;
+	text-align:center;
+	font-weight:700;
+	opacity:0.85;
+	line-height:1;
+}
+
+/* alinhar tabela para ocupar o restante */
+.table-with-handles table.md-table{
+	flex:1 1 auto;
+	border-collapse:collapse;
+}
+
+/* quando uma linha está sendo arrastada (feedback) */
+.md-table tr.dragging{ opacity:0.65; }
+
+/* feedback de destino (aparecerá quando arrastar sobre a área) */
+.md-table tr.drop-target td{
+	outline: 2px dashed rgba(88,166,255,0.14);
+}
+
+/* reduz padding das células para integrar com gutter */
+.md-table td, .md-table th{ padding:8px 6px; }
+
+/* mini audio picker (popup de busca/seleção de áudio) */
+.audio-picker{
+	position:fixed;
+	z-index:2500;
+	min-width:260px;
+	max-width:340px;
+	background:var(--panel);
+	color:var(--muted);
+	border:1px solid rgba(255,255,255,0.04);
+	box-shadow:0 8px 40px rgba(2,6,23,0.7);
+	border-radius:8px;
+	overflow:hidden;
+	padding:8px;
+	/* já era position:fixed; agora permitimos resize nativo */
+	resize: both;
+	overflow: auto; /* necessário para resize funcionar bem */
+	min-width: 220px;
+	min-height: 120px;
+	max-width: 90vw;
+	max-height: 80vh;
+}
+.audio-picker.hidden{ display:none; }
+.audio-picker .ap-header{ padding:4px 6px; }
+.audio-picker .ap-header input{
+	width:100%;
+	padding:8px;
+	border-radius:6px;
+	border:1px solid rgba(255,255,255,0.04);
+	background: rgba(255,255,255,0.01);
+	color:var(--muted);
+	font-size:13px;
+}
+.audio-picker .ap-list{ list-style:none; margin:8px 0 0 0; padding:0; max-height:240px; overflow:auto; }
+.audio-picker .ap-list li{ display:flex; align-items:center; gap:8px; padding:6px 8px; cursor:pointer; border-radius:6px; font-size:13px; color:var(--muted); }
+.audio-picker .ap-list li.empty{ cursor:default; opacity:0.7; }
+.audio-picker .ap-list li:hover{ background:rgba(255,255,255,0.02); color:var(--accent); transform: translateY(-1px); }
+.audio-picker .file-icon{ width:20px; text-align:center; opacity:0.9; }
+.audio-picker .ap-name{ flex:1; min-width:0; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.audio-picker .ap-path{ font-size:11px; color:var(--muted-dim); margin-left:8px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:120px; }
+
+/* indicador visual discreto de "grip" (canto inferior direito) */
+.audio-picker::after{
+	content: "";
+	position: absolute;
+	right: 8px;
+	bottom: 8px;
+	width: 14px;
+	height: 14px;
+	pointer-events: none;
+	border-radius: 3px;
+	background: linear-gradient(135deg, rgba(255,255,255,0.03) 0%, rgba(255,255,255,0.06) 100%);
+	opacity: 0.9;
+	box-shadow: 0 1px 0 rgba(0,0,0,0.25) inset;
+}
+
+/* Scrollbar específica para o audio-picker (WebKit) */
+.audio-picker::-webkit-scrollbar { width:10px; height:10px; }
+.audio-picker::-webkit-scrollbar-track { background: transparent; }
+.audio-picker::-webkit-scrollbar-thumb {
+	background: rgba(255,255,255,0.035);
+	border-radius: 10px;
+	border: 3px solid transparent;
+	background-clip: padding-box;
+	transition: background .12s ease, transform .08s;
+}
+.audio-picker::-webkit-scrollbar-thumb:hover {
+	background: rgba(255,255,255,0.08);
+	transform: translateY(-1px);
+}
+
+/* Scrollbar (Firefox) */
+.audio-picker { scrollbar-width: thin; scrollbar-color: rgba(255,255,255,0.04) transparent; }
+
+/* ajuste responsivo para garantir grip visível em telas menores */
+@media (max-width:420px){
+	.audio-picker::after{ right:6px; bottom:6px; width:12px; height:12px; }
+}
+
+/* save progress bar (top) */
+.save-progress{
+	position:fixed;
+	left:0;
+	right:0;
+	top:0;
+	height:30px;
+	display:flex;
+	align-items:center;
+	gap:12px;
+	padding:4px 12px;
+	background:linear-gradient(180deg, rgba(3,6,12,0.9), rgba(3,6,12,0.96));
+	color:var(--muted);
+	z-index:2800;
+	box-shadow:0 6px 24px rgba(0,0,0,0.6);
+}
+.save-progress.hidden{ display:none; }
+.save-progress-bar{
+	height:6px;
+	flex:1 1 auto;
+	background:rgba(255,255,255,0.03);
+	border-radius:6px;
+	overflow:hidden;
+	position:relative;
+}
+.save-progress-bar::after{
+	content:'';
+	position:absolute;left:0;top:0;bottom:0;width:0%;
+	background:linear-gradient(90deg,var(--accent),#3e8fed);
+	transition: width 240ms linear;
+	border-radius:6px;
+}
+.save-progress-text{
+	min-width:120px;
+	font-size:13px;
+	color:var(--muted);
+	opacity:0.95;
+}
+
+/* connect prompt modal */
+.connect-prompt{
+	position:fixed; inset:0; display:flex; align-items:center; justify-content:center;
+	z-index:2900; background: rgba(2,6,23,0.5);
+}
+.connect-prompt.hidden{ display:none; }
+.connect-prompt-content{
+	width:320px; background:var(--panel); color:var(--muted); border-radius:10px; padding:14px; box-shadow:0 12px 40px rgba(0,0,0,0.6);
+	display:flex; flex-direction:column; gap:8px;
+}
+.connect-prompt .cp-title{ font-weight:700; color:var(--muted); }
+.connect-prompt .cp-body{ font-size:13px; color:var(--muted-dim); }
+.connect-prompt .cp-actions{ display:flex; gap:8px; justify-content:flex-end; margin-top:6px; }
+.connect-prompt .cp-actions button{ padding:8px 10px; font-size:13px; border-radius:8px; }
+
+/* primary */
+.connect-prompt .cp-actions button:first-child{
+	background: linear-gradient(180deg, var(--accent), #3e8fed);
+	color:#031026; border:0;
+}
+.connect-prompt .cp-actions button:last-child{
+	background:transparent; border:1px solid rgba(255,255,255,0.04);
+	color:var(--muted);
+}
+
+/* connection status indicator */
+.conn-status{
+	display:inline-flex;
+	align-items:center;
+	gap:8px;
+	padding:4px 8px;
+	border-radius:8px;
+	background: transparent;
+	border:1px solid rgba(255,255,255,0.03);
+	cursor:pointer;
+	font-size:13px;
+	color:var(--muted);
+}
+.conn-status .dot{
+	width:10px;height:10px;border-radius:50%;background: #c0392b; /* vermelho por padrão */
+	box-shadow:0 2px 6px rgba(0,0,0,0.35) inset;
+	flex:0 0 10px;
+}
+.conn-status.connected .dot{ background: #16a34a; box-shadow: 0 0 8px rgba(22,163,74,0.18); }
+.conn-status.connecting .dot{ background: #f59e0b; box-shadow: 0 0 6px rgba(245,158,11,0.12); }
+.conn-status .label{ font-size:13px; color:var(--muted); white-space:nowrap; max-width:160px; overflow:hidden; text-overflow:ellipsis; }
+
+/* hover/active */
+.conn-status:hover{ background: rgba(255,255,255,0.01); color:var(--accent); transform: translateY(-1px); }

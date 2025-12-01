@@ -1,0 +1,105 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+	<meta charset="utf-8" />
+	<meta name="viewport" content="width=device-width,initial-scale=1" />
+	<title>EZ2 — Editor WYSIWYG Markdown/HTML</title>
+	<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+	<div id="app" class="theme-dark">
+		<aside class="sidebar">
+			<div class="logo">EZ2 • Markdown</div>
+			<nav class="controls">
+				<input id="folderInput" type="file" webkitdirectory directory multiple style="display:none" />
+				<button id="openBtn" title="Abrir pasta (Ctrl+O)">Abrir pasta</button>
+				<button id="collapseBtn" title="Colapsar barra">⇤</button>
+			</nav>
+			<div class="explorer">
+				<div class="explorer-title">Explorer</div>
+				<div class="explorer-search">
+					<input id="explorerSearch" type="search" placeholder="Pesquisar arquivos..." aria-label="Pesquisar arquivos" />
+				</div>
+				<ul id="fileList"><li class="empty">Nenhum arquivo</li></ul>
+			</div>
+		</aside>
+
+		<!-- resizer: arraste para redimensionar a sidebar -->
+		<div id="sidebarResizer" class="sidebar-resizer" role="separator" aria-orientation="vertical" aria-label="Redimensionar barra"></div>
+
+		<main class="main">
+			<header class="editor-header">
+				<div class="tabs"><span id="currentFilename">untitled.md</span></div>
+				<div class="header-actions">
+						<!-- indicador de conexão: clicável para tentar conectar/abrir seletor -->
+						<div id="connStatus" class="conn-status" title="Status da conexão (clicar para conectar)">
+							<span class="dot"></span>
+							<span class="label">Desconectado</span>
+						</div>
+					<!-- botão global para adicionar linha na tabela selecionada -->
+					<button id="addRowBtn" title="Adicionar linha na tabela selecionada">+ Linha</button>
+					<button id="toggleRawBtn" title="Mostrar/Esconder editor bruto">👁</button>
+					<!-- novo: conectar ao salvador local (Python) -->
+					<button id="connectLocalBtn" title="Conectar ao salvador local">🔌</button>
+				</div>
+			</header>
+
+			<section class="preview-pane">
+				<div id="preview" class="preview" title="Preview WYSIWYG — arraste arquivos da barra lateral para inserir"></div>
+			</section>
+		</main>
+	</div>
+
+	<!-- save progress (top fixed) -->
+	<div id="saveProgress" class="save-progress hidden" aria-hidden="true">
+		<div class="save-progress-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100"></div>
+		<div class="save-progress-text">Salvando...</div>
+	</div>
+
+	<!-- connect prompt (show when Ctrl+S but not connected) -->
+	<div id="connectPrompt" class="connect-prompt hidden" role="dialog" aria-modal="true" aria-hidden="true">
+		<div class="connect-prompt-content">
+			<div class="cp-title">Servidor local não conectado</div>
+			<div class="cp-body">Para salvar no disco local você precisa conectar ao servidor local. Deseja conectar agora?</div>
+			<div class="cp-actions">
+				<button id="cpConnectBtn">Conectar</button>
+				<button id="cpCancelBtn">Cancelar</button>
+			</div>
+		</div>
+	</div>
+
+	<!-- painel raw (overlay) -->
+	<div id="rawPanel" class="raw-panel hidden" role="dialog" aria-modal="true">
+		<div class="raw-panel-content">
+			<div class="raw-panel-header">
+				<span>Editor — texto bruto</span>
+				<button id="rawClose" title="Fechar">✕</button>
+			</div>
+			<textarea id="editor" spellcheck="false"></textarea>
+			<div class="raw-panel-actions">
+				<button id="rawCancel">Cancelar</button>
+				<button id="rawApply">Aplicar</button>
+			</div>
+		</div>
+	</div>
+
+	<!-- modal célula (editar conteúdo HTML/texto da célula) -->
+	<div id="modal" class="modal hidden" role="dialog" aria-modal="true">
+		<div class="modal-content">
+			<div class="modal-header">
+				<span>Editar célula</span>
+				<button id="modalClose" title="Fechar">✕</button>
+			</div>
+			<textarea id="modalEditor" spellcheck="false"></textarea>
+			<div class="modal-actions">
+				<button id="modalCancel">Cancelar</button>
+				<button id="modalApply">Aplicar</button>
+			</div>
+		</div>
+	</div>
+
+	<script src="https://cdn.jsdelivr.net/npm/markdown-it@13.0.1/dist/markdown-it.min.js"></script>
+	<script src="https://cdn.jsdelivr.net/npm/turndown@7.1.1/dist/turndown.min.js"></script>
+	<script src="app.js"></script>
+</body>
+</html>
