@@ -18,6 +18,37 @@
 	// info temporário de drag (blockIdx, rowIdx)
 	let __dragInfo = null;
 	
+	// Undo/Redo
+	const undoStack = [];
+	const redoStack = [];
+	const MAX_HISTORY = 50;
+
+	function saveState(){
+		const current = $('editor').value;
+		if(undoStack.length > 0 && undoStack[undoStack.length-1] === current) return;
+		undoStack.push(current);
+		if(undoStack.length > MAX_HISTORY) undoStack.shift();
+		redoStack.length = 0;
+	}
+
+	function undo(){
+		if(undoStack.length === 0) return;
+		const current = $('editor').value;
+		redoStack.push(current);
+		const prev = undoStack.pop();
+		$('editor').value = prev;
+		renderPreviewFrom(prev);
+	}
+
+	function redo(){
+		if(redoStack.length === 0) return;
+		const current = $('editor').value;
+		undoStack.push(current);
+		const next = redoStack.pop();
+		$('editor').value = next;
+		renderPreviewFrom(next);
+	}
+
 	// GitHub integration state
 	let gitHubRepoData = null; // { owner, repo, branch }
 
@@ -262,6 +293,7 @@
 	// inserir texto no textarea na posição do cursor
 	function insertAtCursor(textarea, text){
 		if(!textarea) return;
+		saveState(); // Salvar estado antes de inserir
 		const start = textarea.selectionStart;
 		const end = textarea.selectionEnd;
 		const before = textarea.value.substring(0, start);
@@ -592,6 +624,7 @@
 			}).map(s=>' '+s+' ').join('|') + (trailing? '|':'');
 			const body = parsed.rows.map(r=> leading + r.map(c=>' '+c+' ').join('|') + (trailing? '|':'')).join('\n');
 			blocks[blockIdx] = [headerLine, sepLine, body].join('\n');
+			saveState(); // Salvar antes de aplicar
 			$('editor').value = blocks.join('\n\n');
 			renderPreviewFrom($('editor').value);
 		}catch(e){ console.error('insertAudioIntoTable erro', e); }
@@ -1093,6 +1126,7 @@
 		}).map(s=>' '+s+' ').join('|') + (trailing? '|':'');
 		const body = (parsed.rows || []).map(r=> leading + r.map(c=>' '+c+' ').join('|') + (trailing? '|':'')).join('\n');
 		blocks[blockIdx] = [headerLine, sepLine, body].join('\n');
+		saveState(); // Salvar antes de aplicar
 		$('editor').value = blocks.join('\n\n');
 		renderPreviewFrom($('editor').value);
 	}
@@ -1117,6 +1151,7 @@
 				}).map(s=>' '+s+' ').join('|') + (trailing? '|':'');
 				const body = parsed.rows.map(r=> leading + r.map(c=>' '+c+' ').join('|') + (trailing? '|':'')).join('\n');
 				blocks[blockIdx] = [headerLine, sepLine, body].join('\n');
+				saveState(); // Salvar antes de aplicar
 				$('editor').value = blocks.join('\n\n');
 				currentTableRowIdx = null;
 				renderPreviewFrom($('editor').value);
@@ -1157,7 +1192,11 @@
 			}
 			blocks[idx] = newMd;
 			const out = blocks.join('\n\n');
-			if(out !== $('editor').value){ $('editor').value = out; renderPreviewFrom(out); }
+			if(out !== $('editor').value){ 
+				saveState(); // Salvar se houver mudança
+				$('editor').value = out; 
+				renderPreviewFrom(out); 
+			}
 		}catch(e){ console.error(e); }
 	}
 
@@ -1330,6 +1369,7 @@
 				
 				const blocks = splitBlocks($('editor').value);
 				blocks[blockIdx] = [headerLine, sepLine, body].join('\n');
+				saveState(); // Salvar antes de aplicar reordenação
 				$('editor').value = blocks.join('\n\n');
 				
 				__dragInfo = null;
@@ -1384,6 +1424,7 @@
 				insertAtCursor(editor, '\n\n' + tag + '\n');
 				renderPreviewFrom(editor.value);
 			} else if(editor){
+				saveState(); // Salvar antes de append direto
 				editor.value = editor.value.trim() + '\n\n' + tag + '\n';
 				renderPreviewFrom(editor.value);
 			} else {
@@ -1751,7 +1792,10 @@
 
 		// raw panel toggle
 		const toggleRawBtn = $('toggleRawBtn'), rawPanel = $('rawPanel'), rawApply=$('rawApply'), rawClose=$('rawClose'), rawCancel=$('rawCancel'), rawCopy=$('rawCopy');
-		if(toggleRawBtn) toggleRawBtn.addEventListener('click', ()=> rawPanel.classList.toggle('hidden'));
+		if(toggleRawBtn) toggleRawBtn.addEventListener('click', ()=> {
+			if(rawPanel.classList.contains('hidden')) saveState(); // Salvar ao abrir editor bruto
+			rawPanel.classList.toggle('hidden');
+		});
 		if(rawClose) rawClose.addEventListener('click', ()=> rawPanel.classList.add('hidden'));
 		if(rawApply) rawApply.addEventListener('click', ()=> { renderPreviewFrom($('editor').value); rawPanel.classList.add('hidden'); });
 		if(rawCancel) rawCancel.addEventListener('click', ()=> rawPanel.classList.add('hidden'));
@@ -1901,6 +1945,20 @@
 					}
 				})();
 			}
+			
+			// Undo / Redo
+			if((e.ctrlKey || e.metaKey) && !e.shiftKey && e.key.toLowerCase() === 'z'){
+				// Se o raw panel estiver visível e focado no textarea, deixa o nativo
+				if(!$('rawPanel').classList.contains('hidden') && document.activeElement === $('editor')) return;
+				e.preventDefault();
+				undo();
+			}
+			if((e.ctrlKey || e.metaKey) && (e.key.toLowerCase() === 'y' || (e.shiftKey && e.key.toLowerCase() === 'z'))){
+				if(!$('rawPanel').classList.contains('hidden') && document.activeElement === $('editor')) return;
+				e.preventDefault();
+				redo();
+			}
+
 			// ...existing outros atalhos...
 		});
 
