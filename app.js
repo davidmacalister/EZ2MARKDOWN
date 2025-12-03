@@ -278,6 +278,149 @@
 		return null;
 	}
 
+	// Novo helper para processar mídia em qualquer container
+	function processMedia(root){
+		[...root.querySelectorAll('img')].forEach(img=>{
+			const src = img.getAttribute('src')||'';
+			const resolved = resolveMedia(src);
+			if(resolved && allFiles.has(resolved)){
+				if(gitHubRepoData){
+					img.src = getGitHubRawUrl(resolved);
+					if(!img.dataset.srcOriginal) img.dataset.srcOriginal = src;
+					img.contentEditable = 'false';
+				} else {
+					const file = allFiles.get(resolved); const url = URL.createObjectURL(file);
+					objectUrlMap.set(resolved, url); if(!img.dataset.srcOriginal) img.dataset.srcOriginal = src;
+					img.src = url; img.contentEditable = 'false';
+				}
+			}
+		});
+		[...root.querySelectorAll('audio')].forEach(a=>{
+			const src = a.getAttribute('src')||'';
+			const resolved = resolveMedia(src);
+			if(resolved && allFiles.has(resolved)){
+				if(gitHubRepoData){
+					a.src = getGitHubRawUrl(resolved);
+					if(!a.dataset.srcOriginal) a.dataset.srcOriginal = src;
+					a.contentEditable = 'false'; a.controls = true;
+				} else {
+					const file = allFiles.get(resolved); const url = URL.createObjectURL(file);
+					objectUrlMap.set(resolved, url); if(!a.dataset.srcOriginal) a.dataset.srcOriginal = src;
+					a.src = url; a.contentEditable = 'false'; a.controls = true;
+				}
+			}
+		});
+	}
+
+	// Helper para comportamento "Source on Focus"
+	function setupSourceOnFocus(wrapper){
+		wrapper.addEventListener('focus', function(){
+			if(this.dataset.mode === 'source') return;
+			this.dataset.mode = 'source';
+			// Mostra o markdown original
+			this.textContent = this.dataset.md || '';
+			this.classList.add('source-mode');
+		});
+		wrapper.addEventListener('blur', function(){
+			this.dataset.mode = 'preview';
+			const newSrc = this.textContent;
+			this.dataset.md = newSrc;
+			// Renderiza de volta para HTML
+			this.innerHTML = md.render(newSrc);
+			processMedia(this);
+			this.classList.remove('source-mode');
+		});
+		// Navegação contínua entre blocos
+		wrapper.addEventListener('keydown', handleBlockNavigation);
+	}
+
+	// Helpers de navegação entre blocos (setas)
+	function handleBlockNavigation(e){
+		if(e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
+		
+		const el = e.target;
+		const sel = window.getSelection();
+		if(!sel.rangeCount) return;
+		const range = sel.getRangeAt(0);
+		const text = el.textContent;
+		
+		// Posição do cursor
+		const preRange = range.cloneRange();
+		preRange.selectNodeContents(el);
+		preRange.setEnd(range.endContainer, range.endOffset);
+		const caretAt = preRange.toString().length;
+		
+		const block = el.closest('.block');
+		if(!block) return;
+
+		if(e.key === 'ArrowUp'){
+			// Se estiver na primeira linha visual (sem \n antes)
+			const textBefore = text.substring(0, caretAt);
+			if(!textBefore.includes('\n')){
+				// Caso especial: Tabela
+				if(el.tagName === 'TD'){
+					const tr = el.closest('tr');
+					const tbody = el.closest('tbody');
+					// Se não for a primeira linha da tabela, deixa o navegador lidar
+					if(tr && tbody && tbody.firstElementChild !== tr) return;
+				}
+				
+				const prev = block.previousElementSibling;
+				if(prev && prev.classList.contains('block')){
+					e.preventDefault();
+					focusBlockEnd(prev);
+				}
+			}
+		} else if(e.key === 'ArrowDown'){
+			// Se estiver na última linha visual (sem \n depois)
+			const textAfter = text.substring(caretAt);
+			if(!textAfter.includes('\n')){
+				// Caso especial: Tabela
+				if(el.tagName === 'TD'){
+					const tr = el.closest('tr');
+					const tbody = el.closest('tbody');
+					// Se não for a última linha da tabela, deixa o navegador lidar
+					if(tr && tbody && tbody.lastElementChild !== tr) return;
+				}
+
+				const next = block.nextElementSibling;
+				if(next && next.classList.contains('block')){
+					e.preventDefault();
+					focusBlockStart(next);
+				}
+			}
+		}
+	}
+
+	function focusBlockEnd(block){
+		if(block.dataset.type === 'table'){
+			const lastTd = block.querySelector('tbody tr:last-child td:last-child');
+			if(lastTd){ lastTd.focus(); moveCaret(lastTd, false); }
+		} else {
+			block.focus(); moveCaret(block, false);
+		}
+	}
+
+	function focusBlockStart(block){
+		if(block.dataset.type === 'table'){
+			const firstTd = block.querySelector('tbody tr:first-child td:first-child');
+			if(firstTd){ firstTd.focus(); moveCaret(firstTd, true); }
+		} else {
+			block.focus(); moveCaret(block, true);
+		}
+	}
+
+	function moveCaret(el, toStart){
+		requestAnimationFrame(()=>{
+			const r = document.createRange();
+			r.selectNodeContents(el);
+			r.collapse(toStart);
+			const s = window.getSelection();
+			s.removeAllRanges();
+			s.addRange(r);
+		});
+	}
+
 	// Helper para obter URL raw do GitHub se estivermos nesse modo
 	function getGitHubRawUrl(path){
 		if(!gitHubRepoData || !path) return null;
@@ -838,209 +981,171 @@
 			wrapper.dataset.idx = idx;
 			wrapper.dataset.orig = blk;
 
-			if(blk.trim().startsWith('```')){
-				const lines = blk.split('\n');
-				const code = document.createElement('pre');
-				code.textContent = lines.slice(1, lines.length-1).join('\n');
-				code.contentEditable = 'true';
-				wrapper.appendChild(code);
-				wrapper.dataset.type = 'code';
-			} else {
-				// table?
-				const secondLine = (blk.split('\n')[1]||'').trim();
-				if(/\|/.test(blk) && /^\s*[:\-\s|]+\s*$/.test(secondLine)){
-					const parsed = parseTable(blk);
-					// criar wrapper que contém a coluna de handles (fora da tabela) + tabela
-					const wrapperTable = document.createElement('div');
-					wrapperTable.className = 'table-with-handles';
-					const handlesCol = document.createElement('div');
-					handlesCol.className = 'handles-col';
-					const table = document.createElement('table'); table.className = 'md-table';
-					// cabeçalho (sem col extra)
-					const thead = document.createElement('thead'); const trh = document.createElement('tr');
-					parsed.headers.forEach(h=>{
-						const th = document.createElement('th');
-						if(/<\s*(audio|img|video)/i.test(h)){ th.innerHTML = h; th.dataset.hasHtml = '1'; }
-						else th.textContent = h;
-						trh.appendChild(th);
-					});
-					thead.appendChild(trh); table.appendChild(thead);
-					const tbody = document.createElement('tbody');
-					(parsed.rows.length? parsed.rows : [[]]).forEach((row, rIdx)=>{
-						// criar linha da tabela normalmente (apenas células de dados)
-						const tr = document.createElement('tr');
-						row.forEach((cell, cIdx)=>{ // <-- agora temos cIdx
-							const tdEl = document.createElement('td');
-							 // Armazenar o Markdown original como fonte da verdade
-							tdEl.dataset.md = cell;
+			// Detectar tabela (lógica existente)
+			const secondLine = (blk.split('\n')[1]||'').trim();
+			const isTable = /\|/.test(blk) && /^\s*[:\-\s|]+\s*$/.test(secondLine);
 
-							// Detectar mídia (não editável diretamente via texto)
-							const isMedia = /!\[.*?\]\(.*?\)|<\s*(audio|img|video)/i.test(cell);
+			if(isTable){
+				// Lógica de tabela (mantida)
+				const parsed = parseTable(blk);
+				// criar wrapper que contém a coluna de handles (fora da tabela) + tabela
+				const wrapperTable = document.createElement('div');
+				wrapperTable.className = 'table-with-handles';
+				const handlesCol = document.createElement('div');
+				handlesCol.className = 'handles-col';
+				const table = document.createElement('table'); table.className = 'md-table';
+				// cabeçalho (sem col extra)
+				const thead = document.createElement('thead'); const trh = document.createElement('tr');
+				parsed.headers.forEach(h=>{
+					const th = document.createElement('th');
+					if(/<\s*(audio|img|video)/i.test(h)){ th.innerHTML = h; th.dataset.hasHtml = '1'; }
+					else th.textContent = h;
+					trh.appendChild(th);
+				});
+				thead.appendChild(trh); table.appendChild(thead);
+				const tbody = document.createElement('tbody');
+				(parsed.rows.length? parsed.rows : [[]]).forEach((row, rIdx)=>{
+					// criar linha da tabela normalmente (apenas células de dados)
+					const tr = document.createElement('tr');
+					row.forEach((cell, cIdx)=>{ // <-- agora temos cIdx
+						const tdEl = document.createElement('td');
+						 // Armazenar o Markdown original como fonte da verdade
+						tdEl.dataset.md = cell;
 
-							if(isMedia){
-								tdEl.innerHTML = md.renderInline(cell);
-								tdEl.dataset.hasHtml = '1';
-								tdEl.contentEditable = 'false';
-								tdEl.addEventListener('dblclick', ()=> openCellModal(tdEl, idx));
-							} else {
-								// Texto: Renderiza HTML visualmente, mas edita o fonte (Markdown)
-								tdEl.innerHTML = md.renderInline(cell);
-								tdEl.contentEditable = 'true';
+						// Detectar mídia (não editável diretamente via texto)
+						const isMedia = /!\[.*?\]\(.*?\)|<\s*(audio|img|video)/i.test(cell);
 
-								// Ao focar (clicar): mostra o código fonte (ex: <br>, `code`)
-								tdEl.addEventListener('focus', function(){
-									// Usa o dataset.md para garantir que pegamos o original
-									this.textContent = this.dataset.md || '';
+						if(isMedia){
+							tdEl.innerHTML = md.renderInline(cell);
+							tdEl.dataset.hasHtml = '1';
+							tdEl.contentEditable = 'false';
+							tdEl.addEventListener('dblclick', ()=> openCellModal(tdEl, idx));
+						} else {
+							// Texto: Renderiza HTML visualmente, mas edita o fonte (Markdown)
+							tdEl.innerHTML = md.renderInline(cell);
+							tdEl.contentEditable = 'true';
+
+							// Ao focar (clicar): mostra o código fonte (ex: <br>, `code`)
+							tdEl.addEventListener('focus', function(){
+								// Usa o dataset.md para garantir que pegamos o original
+								this.textContent = this.dataset.md || '';
+							});
+
+							// Ao sair (blur): salva o novo fonte e renderiza novamente
+							tdEl.addEventListener('blur', function(){
+								const newRaw = this.textContent;
+								this.dataset.md = newRaw;
+								this.innerHTML = md.renderInline(newRaw);
+								// Nota: applyBlockEdit será chamado em seguida pelo blur do wrapper
 								});
-
-								// Ao sair (blur): salva o novo fonte e renderiza novamente
-								tdEl.addEventListener('blur', function(){
-									const newRaw = this.textContent;
-									this.dataset.md = newRaw;
-									this.innerHTML = md.renderInline(newRaw);
-									// Nota: applyBlockEdit será chamado em seguida pelo blur do wrapper
-								});
+								
+								// Navegação
+								tdEl.addEventListener('keydown', handleBlockNavigation);
 							}
 							// clique simples: registra célula atual
-							tdEl.addEventListener('click', (ev)=>{
-								ev.stopPropagation();
-								currentTableIdx = idx;
-								currentTableRowIdx = rIdx;
-								currentTableColIdx = cIdx;
-								preview.querySelectorAll('tr.selected-row').forEach(el=>el.classList.remove('selected-row'));
-								tr.classList.add('selected-row');
-							});
-							tr.appendChild(tdEl);
-						});
-						tr.dataset.rowIdx = rIdx;
-						 
-						// (nenhum listener per-tr aqui; o tbody vai gerir dragover/drop centralmente)
-						tbody.appendChild(tr);
-
-						// criar handle fora da tabela e associar eventos de drag
-						const h = document.createElement('div');
-						h.className = 'row-handle';
-						h.innerHTML = '<span class="row-handle-ico">::</span>';
-						h.dataset.rowIdx = rIdx;
-						h.draggable = true;
-						h.addEventListener('dragstart', (e)=>{
-							__dragInfo = { blockIdx: idx, rowIdx: Number(h.dataset.rowIdx) };
-							try{
-								// comunicar bloco/linha arrastada (compatível com outros handlers)
-								const payload = JSON.stringify({ blockIdx: idx, rowIdx: Number(h.dataset.rowIdx) });
-								e.dataTransfer.setData('application/json', payload);
-								e.dataTransfer.setData('text/plain', payload);
-								e.dataTransfer.effectAllowed = 'move';
-								// usar o próprio elemento como drag image (reduz problemas visuais)
-								if(e.dataTransfer.setDragImage) try{ e.dataTransfer.setDragImage(h, 10, 10); }catch(_){}
-							}catch(err){}
-							// marcar linha correspondente para feedback
-							const trows = tbody.querySelectorAll('tr');
-							const targetTr = trows[Number(h.dataset.rowIdx)];
-							if(targetTr) targetTr.classList.add('dragging');
-							});
-						h.addEventListener('dragend', ()=>{
-							__dragInfo = null;
-							tbody.querySelectorAll('tr.dragging').forEach(t=>t.classList.remove('dragging'));
-							tbody.querySelectorAll('tr.drop-target').forEach(t=>t.classList.remove('drop-target'));
-						});
-						handlesCol.appendChild(h);
-					});
-
-					table.appendChild(tbody);
-
-					// REMOVIDO: Listeners de dragover/drop do tbody foram movidos para enablePreviewDrop
-					// para evitar conflitos e centralizar a lógica.
-
-					// colocar handles e table no wrapper
-					wrapperTable.appendChild(handlesCol);
-					wrapperTable.appendChild(table);
-					wrapper.appendChild(wrapperTable);
-					wrapper.dataset.type = 'table';
-					wrapper.dataset.meta = JSON.stringify(parsed);
-
-					// add listeners to rows
-					[...wrapper.querySelectorAll('tbody tr')].forEach((tr, rIdx)=>{
-						tr.addEventListener('click', ev=>{
+						tdEl.addEventListener('click', (ev)=>{
 							ev.stopPropagation();
 							currentTableIdx = idx;
 							currentTableRowIdx = rIdx;
-							// detectar célula clicada (se o click veio de um td)
-							const td = ev.target && ev.target.closest ? ev.target.closest('td') : null;
-							currentTableColIdx = td ? Array.from(tr.children).indexOf(td) : null;
+							currentTableColIdx = cIdx;
 							preview.querySelectorAll('tr.selected-row').forEach(el=>el.classList.remove('selected-row'));
 							tr.classList.add('selected-row');
 						});
-						tr.addEventListener('contextmenu', ev=>{
-							ev.preventDefault(); ev.stopPropagation();
-							currentTableIdx = idx; currentTableRowIdx = rIdx;
-							preview.querySelectorAll('tr.selected-row').forEach(el=>el.classList.remove('selected-row'));
-							tr.classList.add('selected-row');
-							// descobrir coluna clicada (se houver)
-							const td = ev.target && ev.target.closest ? ev.target.closest('td') : null;
-							const colIdx = td ? Array.from(tr.children).indexOf(td) : null;
-							showContextMenu(ev.clientX, ev.clientY, {blockIdx: idx, rowIdx: rIdx, colIdx});
-						});
-						// contextmenu também no espaço da tabela (quando não clicar numa linha)
-						table.addEventListener('contextmenu', ev => {
-							ev.preventDefault(); ev.stopPropagation();
-							// se clicou dentro de uma <tr>, deixa o handler da linha cuidar
-							const trEl = ev.target && ev.target.closest ? ev.target.closest('tr') : null;
-							if(trEl) return;
-							// marca apenas a tabela (sem linha selecionada) e abre o menu
-							currentTableIdx = idx;
-							currentTableRowIdx = null;
-							currentTableColIdx = null;
-							preview.querySelectorAll('tr.selected-row').forEach(el=>el.classList.remove('selected-row'));
-							showContextMenu(ev.clientX, ev.clientY, {blockIdx: idx, rowIdx: null, colIdx: null});
-						});
+						tr.appendChild(tdEl);
 					});
-				} else if(blk.split('\n').every(l=>/^\s*([*+\-]|\d+\.)\s+/.test(l))){
-					const html = md.render(blk);
-					const div = document.createElement('div'); div.innerHTML = html;
-					wrapper.appendChild(div);
-					wrapper.dataset.type = 'list';
-				} else {
-					const html = md.render(blk);
-					// contenteditable="false" no hint para evitar cursor nele
-					wrapper.innerHTML = html + '<span class="editHint" contenteditable="false">editar</span>';
-					wrapper.contentEditable = 'true';
-					wrapper.dataset.type = 'html';
-				}
-			}
+					tr.dataset.rowIdx = rIdx;
+					 
+					// (nenhum listener per-tr aqui; o tbody vai gerir dragover/drop centralmente)
+					tbody.appendChild(tr);
 
-			// media processing (images/audio)
-			[...wrapper.querySelectorAll('img')].forEach(img=>{
-				const src = img.getAttribute('src')||'';
-				const resolved = resolveMedia(src);
-				if(resolved && allFiles.has(resolved)){
-					// Se estiver em modo GitHub, usar URL raw direta em vez de blob
-					if(gitHubRepoData){
-						img.src = getGitHubRawUrl(resolved);
-						if(!img.dataset.srcOriginal) img.dataset.srcOriginal = src;
-						img.contentEditable = 'false';
-					} else {
-						const file = allFiles.get(resolved); const url = URL.createObjectURL(file);
-						objectUrlMap.set(resolved, url); if(!img.dataset.srcOriginal) img.dataset.srcOriginal = src;
-						img.src = url; img.contentEditable = 'false';
-					}
-				}
-			});
-			[...wrapper.querySelectorAll('audio')].forEach(a=>{
-				const src = a.getAttribute('src')||'';
-				const resolved = resolveMedia(src);
-				if(resolved && allFiles.has(resolved)){
-					if(gitHubRepoData){
-						a.src = getGitHubRawUrl(resolved);
-						if(!a.dataset.srcOriginal) a.dataset.srcOriginal = src;
-						a.contentEditable = 'false'; a.controls = true;
-					} else {
-						const file = allFiles.get(resolved); const url = URL.createObjectURL(file);
-						objectUrlMap.set(resolved, url); if(!a.dataset.srcOriginal) a.dataset.srcOriginal = src;
-						a.src = url; a.contentEditable = 'false'; a.controls = true;
-					}
-				}
-			});
+					// criar handle fora da tabela e associar eventos de drag
+					const h = document.createElement('div');
+					h.className = 'row-handle';
+					h.innerHTML = '<span class="row-handle-ico">::</span>';
+					h.dataset.rowIdx = rIdx;
+					h.draggable = true;
+					h.addEventListener('dragstart', (e)=>{
+						__dragInfo = { blockIdx: idx, rowIdx: Number(h.dataset.rowIdx) };
+						try{
+							// comunicar bloco/linha arrastada (compatível com outros handlers)
+							const payload = JSON.stringify({ blockIdx: idx, rowIdx: Number(h.dataset.rowIdx) });
+							e.dataTransfer.setData('application/json', payload);
+							e.dataTransfer.setData('text/plain', payload);
+							e.dataTransfer.effectAllowed = 'move';
+							// usar o próprio elemento como drag image (reduz problemas visuais)
+							if(e.dataTransfer.setDragImage) try{ e.dataTransfer.setDragImage(h, 10, 10); }catch(_){}
+						}catch(err){}
+						// marcar linha correspondente para feedback
+						const trows = tbody.querySelectorAll('tr');
+						const targetTr = trows[Number(h.dataset.rowIdx)];
+						if(targetTr) targetTr.classList.add('dragging');
+						});
+					h.addEventListener('dragend', ()=>{
+						__dragInfo = null;
+						tbody.querySelectorAll('tr.dragging').forEach(t=>t.classList.remove('dragging'));
+						tbody.querySelectorAll('tr.drop-target').forEach(t=>t.classList.remove('drop-target'));
+					});
+					handlesCol.appendChild(h);
+				});
+
+				table.appendChild(tbody);
+
+				// REMOVIDO: Listeners de dragover/drop do tbody foram movidos para enablePreviewDrop
+				// para evitar conflitos e centralizar a lógica.
+
+				// colocar handles e table no wrapper
+				wrapperTable.appendChild(handlesCol);
+				wrapperTable.appendChild(table);
+				wrapper.appendChild(wrapperTable);
+				wrapper.dataset.type = 'table';
+				wrapper.dataset.meta = JSON.stringify(parsed);
+
+				// add listeners to rows
+				[...wrapper.querySelectorAll('tbody tr')].forEach((tr, rIdx)=>{
+					tr.addEventListener('click', ev=>{
+						ev.stopPropagation();
+						currentTableIdx = idx;
+						currentTableRowIdx = rIdx;
+						// detectar célula clicada (se o click veio de um td)
+						const td = ev.target && ev.target.closest ? ev.target.closest('td') : null;
+						currentTableColIdx = td ? Array.from(tr.children).indexOf(td) : null;
+						preview.querySelectorAll('tr.selected-row').forEach(el=>el.classList.remove('selected-row'));
+						tr.classList.add('selected-row');
+					});
+					tr.addEventListener('contextmenu', ev=>{
+						ev.preventDefault(); ev.stopPropagation();
+						currentTableIdx = idx; currentTableRowIdx = rIdx;
+						preview.querySelectorAll('tr.selected-row').forEach(el=>el.classList.remove('selected-row'));
+						tr.classList.add('selected-row');
+						// descobrir coluna clicada (se houver)
+						const td = ev.target && ev.target.closest ? ev.target.closest('td') : null;
+						const colIdx = td ? Array.from(tr.children).indexOf(td) : null;
+						showContextMenu(ev.clientX, ev.clientY, {blockIdx: idx, rowIdx: rIdx, colIdx});
+					});
+					// contextmenu também no espaço da tabela (quando não clicar numa linha)
+					table.addEventListener('contextmenu', ev => {
+						ev.preventDefault(); ev.stopPropagation();
+						// se clicou dentro de uma <tr>, deixa o handler da linha cuidar
+						const trEl = ev.target && ev.target.closest ? ev.target.closest('tr') : null;
+						if(trEl) return;
+						// marca apenas a tabela (sem linha selecionada) e abre o menu
+						currentTableIdx = idx;
+						currentTableRowIdx = null;
+						currentTableColIdx = null;
+						preview.querySelectorAll('tr.selected-row').forEach(el=>el.classList.remove('selected-row'));
+						showContextMenu(ev.clientX, ev.clientY, {blockIdx: idx, rowIdx: null, colIdx: null});
+					});
+				});
+			} else {
+				// Todos os outros blocos (Texto, Lista, Código, HTML)
+				// Usam o padrão "Source on Focus"
+				wrapper.dataset.md = blk;
+				wrapper.innerHTML = md.render(blk);
+				processMedia(wrapper);
+				wrapper.contentEditable = 'true';
+				wrapper.dataset.type = 'generic'; // Tipo genérico, pois o conteúdo é gerido via dataset.md
+				setupSourceOnFocus(wrapper);
+			}
 
 			preview.appendChild(wrapper);
 
@@ -1053,7 +1158,7 @@
 			wrapper.addEventListener('blur', ()=> applyBlockEdit(idx, wrapper), true);
 
 			// sincroniza alturas dos handles com as linhas visíveis (chave: chamar depois de append)
-			(function syncHandlesOnce(w){
+			if(isTable) (function syncHandlesOnce(w){
 				const wrapperTable = w.querySelector('.table-with-handles');
 				if(!wrapperTable) return;
 				const handlesCol = wrapperTable.querySelector('.handles-col');
@@ -1187,10 +1292,8 @@
 			const type = wrapper.dataset.type;
 			const blocks = splitBlocks($('editor').value);
 			let newMd = blocks[idx] || '';
-			if(type === 'code'){
-				const pre = wrapper.querySelector('pre');
-				if(pre) newMd = '```\n' + pre.innerText + '\n```';
-			} else if(type === 'table'){
+			
+			if(type === 'table'){
 				const table = wrapper.querySelector('table');
 				if(table){
 					// escape pipes e newlines para não quebrar a estrutura da tabela
@@ -1223,12 +1326,18 @@
 					newMd = [headerLine, sepLine, body].join('\n');
 				}
 			} else {
-				if(wrapper.querySelector && wrapper.querySelector('audio')) newMd = wrapper.innerHTML.trim();
-				else {
-					// remove o hint "editar" antes de converter para markdown
-					const clone = wrapper.cloneNode(true);
-					clone.querySelectorAll('.editHint').forEach(e=>e.remove());
-					newMd = td.turndown(clone.innerHTML).trim();
+				// Blocos genéricos (Texto, Lista, Código)
+				// Se tiver dataset.md, usa ele como fonte da verdade
+				if(wrapper.dataset.md !== undefined){
+					newMd = wrapper.dataset.md;
+				} else {
+					// Fallback legado (não deve ser atingido com a nova lógica)
+					if(wrapper.querySelector && wrapper.querySelector('audio')) newMd = wrapper.innerHTML.trim();
+					else {
+						const clone = wrapper.cloneNode(true);
+						clone.querySelectorAll('.editHint').forEach(e=>e.remove());
+						newMd = td.turndown(clone.innerHTML).trim();
+					}
 				}
 			}
 			blocks[idx] = newMd;

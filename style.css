@@ -172,9 +172,17 @@ body{margin:0;font-family:Inter, "Segoe UI", Roboto, Arial, sans-serif;backgroun
 .preview img{max-width:100%;height:auto;border-radius:6px}
 .preview audio{display:block;width:100%;margin:8px 0}
 
+/* Ajuste para visual contínuo: reduzir margens dos blocos */
+.preview .block {
+	margin-bottom: 2px; /* Margem mínima entre blocos */
+	position: relative;
+}
+/* Remover margens padrão de elementos internos para controle total */
+.preview .block > *:first-child { margin-top: 0; }
+.preview .block > *:last-child { margin-bottom: 0; }
+
 /* hint discreto para edição — escondido por padrão, aparece ao hover */
 .preview .block{
-	/* ...existing styles... */
 	position: relative; /* necessário para posicionar o hint */
 }
 .preview .block .editHint{
@@ -193,6 +201,18 @@ body{margin:0;font-family:Inter, "Segoe UI", Roboto, Arial, sans-serif;backgroun
 }
 .preview .block:hover .editHint{
 	display: inline-block;
+}
+
+/* Estilo para blocos em modo de edição (Source on Focus) */
+.preview .block.source-mode {
+	font-family: Consolas, monospace;
+	white-space: pre-wrap;
+	color: var(--muted); /* Texto cinza claro (integrado) */
+	background: rgba(255,255,255,0.03); /* Fundo cinza muito sutil */
+	padding: 2px 4px;
+	border-radius: 4px;
+	outline: none;
+	box-shadow: none; /* Remove a borda verde para visual contínuo */
 }
 
 /* menu de contexto customizado no preview */
