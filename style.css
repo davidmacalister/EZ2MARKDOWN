@@ -762,7 +762,8 @@ pre::-webkit-scrollbar-thumb:hover,
 	box-shadow: 0 6px 20px rgba(0,0,0,0.6);
 	padding: 8px;
 	border-radius: 6px;
-	max-width: 320px;
+	max-width: 380px; /* Aumentado de 320px para 380px */
+	min-width: 280px; /* Adicionado min-width para garantir tamanho decente para áudio */
 	pointer-events: none; /* Permite que o mouseleave no item pai funcione corretamente */
 }
 .explorer-preview-popup.hidden {

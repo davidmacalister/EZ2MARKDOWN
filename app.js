@@ -701,10 +701,10 @@
 		} else if (['mp3','wav','ogg','m4a'].includes(ext)) {
 			if(gitHubRepoData) {
 				const url = getGitHubRawUrl(path);
-				content = `<div style="margin-bottom:4px; font-size:11px; color:#ccc;">Tocando preview...</div><audio controls autoplay src="${url}" style="width:100%; height:32px;"></audio>`;
+				content = `<audio controls autoplay src="${url}" style="width:100%; height:32px;"></audio>`;
 			} else {
 				__previewUrl = URL.createObjectURL(file);
-				content = `<div style="margin-bottom:4px; font-size:11px; color:#ccc;">Tocando preview...</div><audio controls autoplay src="${__previewUrl}" style="width:100%; height:32px;"></audio>`;
+				content = `<audio controls autoplay src="${__previewUrl}" style="width:100%; height:32px;"></audio>`;
 			}
 		} else if (['md','txt','js','json','css','html','py'].includes(ext)) {
 			// Preview de texto (limitado)
@@ -1530,6 +1530,7 @@
 					// Atualizar o arquivo no mapa com o conteúdo real
 					f = new File([txt], path.split('/').pop(), {type: 'text/markdown'});
 					allFiles.set(path, f);
+					if(/\.md$/i.test(path)) mdFiles.set(path, f);
 				} catch(e) {
 					alert('Erro ao baixar arquivo do GitHub: ' + e.message);
 					$('editor').value = '';
