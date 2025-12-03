@@ -1750,11 +1750,19 @@
 		}
 
 		// raw panel toggle
-		const toggleRawBtn = $('toggleRawBtn'), rawPanel = $('rawPanel'), rawApply=$('rawApply'), rawClose=$('rawClose'), rawCancel=$('rawCancel');
+		const toggleRawBtn = $('toggleRawBtn'), rawPanel = $('rawPanel'), rawApply=$('rawApply'), rawClose=$('rawClose'), rawCancel=$('rawCancel'), rawCopy=$('rawCopy');
 		if(toggleRawBtn) toggleRawBtn.addEventListener('click', ()=> rawPanel.classList.toggle('hidden'));
 		if(rawClose) rawClose.addEventListener('click', ()=> rawPanel.classList.add('hidden'));
 		if(rawApply) rawApply.addEventListener('click', ()=> { renderPreviewFrom($('editor').value); rawPanel.classList.add('hidden'); });
 		if(rawCancel) rawCancel.addEventListener('click', ()=> rawPanel.classList.add('hidden'));
+		// Novo: botão copiar
+		if(rawCopy) rawCopy.addEventListener('click', async ()=>{
+			try{
+				await navigator.clipboard.writeText($('editor').value);
+				const old = rawCopy.textContent; rawCopy.textContent = 'Copiado!';
+				setTimeout(()=> rawCopy.textContent = old, 1500);
+			}catch(e){ console.error(e); }
+		});
 
 		// modal handlers
 		const modal = $('modal'), modalApply=$('modalApply'), modalClose=$('modalClose'), modalCancel=$('modalCancel');
