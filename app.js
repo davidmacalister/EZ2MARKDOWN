@@ -2,6 +2,7 @@
 	// depende de markdown-it e turndown (carregados no HTML)
 	const md = window.markdownit({html:true,linkify:true});
 	const td = new window.TurndownService();
+	td.keep(['audio', 'video', 'source']); // Manter tags de áudio/vídeo ao converter HTML->MD
 
 	// estado
 	let allFiles = new Map();
@@ -870,8 +871,12 @@
 						const tr = document.createElement('tr');
 						row.forEach((cell, cIdx)=>{ // <-- agora temos cIdx
 							const tdEl = document.createElement('td');
-							if(/<\s*(audio|img|video)/i.test(cell)){
-								tdEl.innerHTML = cell;
+							// Detectar imagem Markdown ou tags HTML de mídia
+							const isMdImg = /!\[.*?\]\(.*?\)/.test(cell);
+							if(/<\s*(audio|img|video)/i.test(cell) || isMdImg){
+								if(isMdImg) tdEl.innerHTML = md.renderInline(cell);
+								else tdEl.innerHTML = cell;
+								
 								tdEl.dataset.hasHtml = '1';
 								tdEl.contentEditable = 'false';
 								tdEl.addEventListener('dblclick', ()=> openCellModal(tdEl, idx));
@@ -1174,7 +1179,15 @@
 					// escape pipes e newlines para não quebrar a estrutura da tabela
 					const esc = t => (t||'').replace(/\|/g, '\\|').replace(/\r?\n/g, ' ');
 					const ths = [...table.querySelectorAll('thead th')].map(t=> t.dataset.hasHtml ? serializeHtml(t.innerHTML) : esc(t.textContent).trim());
-					const trs = [...table.querySelectorAll('tbody tr')].map(tr=> [...tr.querySelectorAll('td')].map(td => td.dataset.hasHtml ? serializeHtml(td.innerHTML) : esc(td.textContent).trim()));
+					// Alterado: usar 'cellEl' para não conflitar com 'td' (TurndownService) e converter HTML de volta para MD
+					const trs = [...table.querySelectorAll('tbody tr')].map(tr=> [...tr.querySelectorAll('td')].map(cellEl => {
+						if(cellEl.dataset.hasHtml){
+							const html = serializeHtml(cellEl.innerHTML);
+							// Converte HTML de volta para Markdown (ex: img -> ![]), preservando audio/video
+							return esc(td.turndown(html)).trim();
+						}
+						return esc(cellEl.textContent).trim();
+					}));
 					const leading = '|', trailing = '|';
 					const headerLine = leading + ths.map(c=>' '+c+' ').join('|') + trailing;
 					const sepLine = leading + ths.map(()=> ' --- ').join('|') + trailing;
@@ -1881,7 +1894,7 @@
 				} else startWidth = sidebar.getBoundingClientRect().width;
 				dragging = true; startX = t.clientX;
 				if(appEl) appEl.classList.add('sidebar-resizing');
-			});
+				});
 			window.addEventListener('touchmove', e=>{
 				if(!dragging) return;
 				const t = e.touches[0];
