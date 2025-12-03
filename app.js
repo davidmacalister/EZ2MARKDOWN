@@ -605,6 +605,7 @@
 		if(__explorerContextMenuEl) return;
 		__explorerContextMenuEl = document.createElement('div');
 		__explorerContextMenuEl.className = 'explorer-context-menu hidden';
+		// Alterado: Removido "Abrir em nova aba"
 		__explorerContextMenuEl.innerHTML = '<div class="ecm-item" data-action="rename">Renomear...</div><div class="ecm-item" data-action="copy">Copiar nome</div>';
 		document.body.appendChild(__explorerContextMenuEl);
 
@@ -614,6 +615,7 @@
 			const action = it.dataset.action;
 			const path = __explorerContextMenuEl.dataset.path;
 			hideExplorerContextMenu();
+			// Alterado: Removido handler de open-new-tab
 			if(action === 'rename') renameFile(path);
 			if(action === 'copy') copyFileName(path);
 		});
@@ -643,6 +645,105 @@
 		if(!__explorerContextMenuEl) return;
 		__explorerContextMenuEl.classList.add('hidden');
 		__explorerContextMenuEl.style.left = ''; __explorerContextMenuEl.style.top = '';
+	}
+
+	// --- Explorer Hover Preview ---
+	let __previewTimer = null;
+	let __previewEl = null;
+	let __previewUrl = null;
+	let __currentPreviewPath = null;
+
+	function createPreviewPopup() {
+		if (__previewEl) return;
+		__previewEl = document.createElement('div');
+		__previewEl.className = 'explorer-preview-popup hidden';
+		document.body.appendChild(__previewEl);
+	}
+
+	function hidePreviewPopup() {
+		if (__previewTimer) clearTimeout(__previewTimer);
+		__previewTimer = null;
+		if (__previewEl) {
+			__previewEl.classList.add('hidden');
+			// Parar áudio se estiver tocando
+			const audio = __previewEl.querySelector('audio');
+			if(audio) { audio.pause(); audio.src = ''; }
+			__previewEl.innerHTML = '';
+		}
+		if (__previewUrl) {
+			URL.revokeObjectURL(__previewUrl);
+			__previewUrl = null;
+		}
+		__currentPreviewPath = null;
+	}
+
+	async function showPreviewPopup(targetEl, path) {
+		createPreviewPopup();
+		__currentPreviewPath = path;
+		
+		const file = allFiles.get(path);
+		if (!file) return;
+
+		const ext = (path.split('.').pop()||'').toLowerCase();
+		let content = '';
+		
+		// Limpar URL anterior
+		if (__previewUrl) { URL.revokeObjectURL(__previewUrl); __previewUrl = null; }
+
+		if (['png','jpg','jpeg','gif','webp','svg'].includes(ext)) {
+			if(gitHubRepoData) {
+				const url = getGitHubRawUrl(path);
+				content = `<img src="${url}" style="max-width:100%; max-height:180px; display:block; border-radius:4px;">`;
+			} else {
+				__previewUrl = URL.createObjectURL(file);
+				content = `<img src="${__previewUrl}" style="max-width:100%; max-height:180px; display:block; border-radius:4px;">`;
+			}
+		} else if (['mp3','wav','ogg','m4a'].includes(ext)) {
+			if(gitHubRepoData) {
+				const url = getGitHubRawUrl(path);
+				content = `<div style="margin-bottom:4px; font-size:11px; color:#ccc;">Tocando preview...</div><audio controls autoplay src="${url}" style="width:100%; height:32px;"></audio>`;
+			} else {
+				__previewUrl = URL.createObjectURL(file);
+				content = `<div style="margin-bottom:4px; font-size:11px; color:#ccc;">Tocando preview...</div><audio controls autoplay src="${__previewUrl}" style="width:100%; height:32px;"></audio>`;
+			}
+		} else if (['md','txt','js','json','css','html','py'].includes(ext)) {
+			// Preview de texto (limitado)
+			try {
+				let text = '';
+				if(gitHubRepoData && file.size === 0) text = "(Carregando do GitHub...)";
+				else text = await file.slice(0, 1000).text();
+				
+				content = `<pre style="margin:0; font-size:10px; white-space:pre-wrap; max-height:180px; overflow:hidden; color:#aaa;">${text.slice(0,500).replace(/</g,'&lt;') + (text.length>500?'...':'')}</pre>`;
+			} catch(e) { return; }
+		} else {
+			return; // Tipo sem preview
+		}
+
+		if (__currentPreviewPath !== path) return; // Mudou enquanto carregava
+
+		__previewEl.innerHTML = content;
+		__previewEl.classList.remove('hidden');
+
+		// Posicionamento
+		const rect = targetEl.getBoundingClientRect();
+		const pRect = __previewEl.getBoundingClientRect();
+		
+		// Tenta posicionar à direita, se não der, em cima ou embaixo
+		let top = rect.top;
+		let left = rect.right + 12;
+		
+		if (left + pRect.width > window.innerWidth) {
+			left = rect.left + 20;
+			top = rect.bottom + 8;
+		}
+		
+		// Ajuste vertical se sair da tela
+		if (top + pRect.height > window.innerHeight) {
+			top = window.innerHeight - pRect.height - 10;
+		}
+
+		__previewEl.style.top = top + 'px';
+		__previewEl.style.left = left + 'px';
 	}
 
 	// copiar nome do arquivo (apenas o basename)
@@ -1382,6 +1483,23 @@
 					const nameSpan = document.createElement('span'); nameSpan.className='name'; nameSpan.textContent = ch.name;
 					a.appendChild(icon); a.appendChild(nameSpan);
 					a.addEventListener('click', e=>{ e.preventDefault(); if(ch.path.endsWith('.md')) openMd(ch.path); });
+					
+					// Novo: Listeners para Hover Preview
+					a.addEventListener('mouseenter', () => {
+						if (__previewTimer) clearTimeout(__previewTimer);
+						// Se já estiver mostrando outro, fecha
+						if(__currentPreviewPath && __currentPreviewPath !== ch.path) hidePreviewPopup();
+						// Inicia timer de 2 segundos
+						__previewTimer = setTimeout(() => showPreviewPopup(a, ch.path), 500);
+					});
+					a.addEventListener('mouseleave', () => {
+						if (__previewTimer) clearTimeout(__previewTimer);
+						hidePreviewPopup();
+					});
+					a.addEventListener('mousedown', () => {
+						hidePreviewPopup(); // Fecha imediatamente ao clicar
+					});
+
 					li.appendChild(a);
 					makeExplorerDraggable(li, ch.path);
 					a.addEventListener('contextmenu', (ev)=>{ ev.preventDefault(); ev.stopPropagation(); showExplorerContextMenu(ev.clientX, ev.clientY, ch.path); });

@@ -753,5 +753,18 @@ pre::-webkit-scrollbar-thumb:hover,
 	transform: translateY(-1px);
 }
 
-/* hover/active */
-.conn-status:hover{ background: rgba(255,255,255,0.01); color:var(--accent); transform: translateY(-1px); }
+/* Explorer Hover Preview Popup */
+.explorer-preview-popup {
+	position: fixed;
+	z-index: 3000;
+	background: var(--panel);
+	border: 1px solid rgba(255,255,255,0.1);
+	box-shadow: 0 6px 20px rgba(0,0,0,0.6);
+	padding: 8px;
+	border-radius: 6px;
+	max-width: 320px;
+	pointer-events: none; /* Permite que o mouseleave no item pai funcione corretamente */
+}
+.explorer-preview-popup.hidden {
+	display: none;
+}
