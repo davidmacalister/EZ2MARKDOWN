@@ -1,6 +1,7 @@
 (function(){
 	// depende de markdown-it e turndown (carregados no HTML)
-	const md = window.markdownit({html:true,linkify:true});
+	// Alterado: breaks:true para considerar \n como quebra de linha visual (comportamento contínuo)
+	const md = window.markdownit({html:true,linkify:true, breaks:true});
 	const td = new window.TurndownService();
 	td.keep(['audio', 'video', 'source', 'br']); // Manter tags de áudio/vídeo e quebras de linha ao converter HTML->MD
 
@@ -329,13 +330,103 @@
 			this.innerHTML = md.render(newSrc);
 			processMedia(this);
 			this.classList.remove('source-mode');
+			});
+			
+		// Novo: Interceptar Enter e Backspace
+		wrapper.addEventListener('keydown', function(e){
+			// Enter: Cria nova linha/bloco
+			if(e.key === 'Enter'){
+				e.preventDefault();
+				const tag = (this.dataset.tag || '').toLowerCase();
+				const isCode = tag === 'pre' || this.textContent.trim().startsWith('```');
+				const isList = tag === 'ul' || tag === 'ol' || /^\s*([-*+]|\d+\.)\s/.test(this.textContent);
+				const insertChars = (e.shiftKey || isCode || isList) ? '\n' : '\n\n';
+
+				const sel = window.getSelection();
+				if(sel.rangeCount){
+					const range = sel.getRangeAt(0);
+					const textNode = document.createTextNode(insertChars);
+					range.deleteContents();
+					range.insertNode(textNode);
+					range.setStartAfter(textNode);
+					range.setEndAfter(textNode);
+					sel.removeAllRanges();
+					sel.addRange(range);
+				}
+			}
+
+			// Backspace: Fundir com bloco anterior se estiver no início
+			if(e.key === 'Backspace'){
+				const sel = window.getSelection();
+				if(!sel.rangeCount) return;
+				const range = sel.getRangeAt(0);
+				
+				// Verificar se cursor está no início visual
+				const preRange = range.cloneRange();
+				preRange.selectNodeContents(this);
+				preRange.setEnd(range.startContainer, range.startOffset);
+				const caretAt = preRange.toString().length;
+
+				if(caretAt === 0){
+					const prev = this.previousElementSibling;
+					if(prev && prev.classList.contains('block')){
+						// Se o anterior for tabela, foca no final dela mas não mergeia
+						if(prev.dataset.type === 'table'){
+							e.preventDefault();
+							focusBlockEnd(prev);
+							return;
+						}
+
+						// Merge com bloco anterior (genérico)
+						e.preventDefault();
+						
+						const currentText = this.dataset.md || this.textContent;
+						const prevText = prev.dataset.md || prev.textContent;
+						
+						// Novo conteúdo combinado
+						const newText = prevText + currentText;
+						const mergePos = prevText.length;
+						
+						// Atualizar bloco anterior
+						prev.dataset.md = newText;
+						prev.textContent = newText;
+						prev.classList.add('source-mode');
+						prev.dataset.mode = 'source';
+						
+						// Remover bloco atual
+						this.remove();
+						
+						// Atualizar editor global (reconstruir tudo pois índices mudaram)
+						const allBlocks = Array.from(document.querySelectorAll('#preview .block'));
+						const newEditorValue = allBlocks.map(b => getBlockMarkdown(b)).join('\n\n');
+						
+						saveState();
+						$('editor').value = newEditorValue;
+						
+						// Posicionar cursor no ponto de fusão
+						prev.focus();
+						requestAnimationFrame(()=>{
+							const r = document.createRange();
+							if(prev.firstChild){
+								r.setStart(prev.firstChild, mergePos);
+								r.collapse(true);
+								const s = window.getSelection();
+								s.removeAllRanges();
+								s.addRange(r);
+							}
+						});
+					}
+				}
+			}
 		});
+
 		// Navegação contínua entre blocos
 		wrapper.addEventListener('keydown', handleBlockNavigation);
 	}
 
 	// Helpers de navegação entre blocos (setas)
 	function handleBlockNavigation(e){
+		 // Removido tratamento manual de Enter para deixar o navegador/editor agir naturalmente
 		if(e.key !== 'ArrowUp' && e.key !== 'ArrowDown') return;
 		
 		const el = e.target;
@@ -448,22 +539,82 @@
 		textarea.focus();
 	}
 
-	// split blocks preserving fenced code
+	// split blocks: Granular (parágrafos, headers, etc) para permitir edição WYSIWYG
 	function splitBlocks(text){
 		const lines = text.replace(/\r/g,'').split('\n');
-		const blocks = []; let cur = [], inFence=false;
-		for(const line of lines){
-			if(line.startsWith('```')){
+		const blocks = [];
+		let cur = [];
+		
+		const flush = () => {
+			if(cur.length > 0){
+				blocks.push(cur.join('\n'));
+				cur = [];
+			}
+		};
+
+		// Detecta início de tabela
+		const isTableStart = (i) => {
+			if(i + 1 >= lines.length) return false;
+			const l1 = lines[i].trim();
+			const l2 = lines[i+1].trim();
+			if(!l1.includes('|')) return false;
+			return /^\|?[\s\-:|]+\|?$/.test(l2) && l2.includes('---');
+		};
+
+		let i = 0;
+		while(i < lines.length){
+			const line = lines[i];
+			const trim = line.trim();
+
+			// Code Fences
+			if(trim.startsWith('```')){
+				flush();
 				cur.push(line);
-				if(inFence){ blocks.push(cur.join('\n')); cur=[]; inFence=false; }
-				else inFence=true;
+				i++;
+				while(i < lines.length){
+					cur.push(lines[i]);
+					if(lines[i].trim().startsWith('```')){
+						i++;
+						break;
+					}
+					i++;
+				}
+				flush();
 				continue;
 			}
-			if(inFence){ cur.push(line); continue; }
-			if(line.trim()===''){ if(cur.length){ blocks.push(cur.join('\n')); cur=[]; } }
-			else cur.push(line);
+
+			// Tabela
+			if(isTableStart(i)){
+				flush();
+				while(i < lines.length){
+					const tLine = lines[i];
+					if(tLine.trim() === '') break;
+					cur.push(tLine);
+					i++;
+				}
+				flush();
+				continue;
+			}
+
+			// Linha vazia -> separador de bloco
+			if(trim === ''){
+				flush();
+				i++;
+				continue;
+			}
+
+			// Header (ATX) - Novo: Headers quebram o bloco imediatamente
+			if(/^#{1,6}(\s|$)/.test(trim)){
+				flush();
+				blocks.push(line);
+				i++;
+				continue;
+			}
+
+			cur.push(line);
+			i++;
 		}
-		if(cur.length) blocks.push(cur.join('\n'));
+		flush();
 		return blocks;
 	}
 
@@ -507,6 +658,45 @@
 			el.removeAttribute('contenteditable');
 		});
 		return tmp.innerHTML.trim();
+	}
+
+	// Helper para extrair markdown de um bloco (usado em applyBlockEdit e merge)
+	function getBlockMarkdown(wrapper){
+		const type = wrapper.dataset.type;
+		if(type === 'table'){
+			const table = wrapper.querySelector('table');
+			if(!table) return wrapper.dataset.orig || '';
+			
+			const esc = t => (t||'').replace(/\|/g, '\\|').replace(/\r?\n/g, ' ');
+			const getCellContent = (cellEl) => {
+				if(cellEl === document.activeElement) return esc(cellEl.textContent).trim();
+				if(cellEl.dataset.md !== undefined) return esc(cellEl.dataset.md).trim();
+				if(cellEl.dataset.hasHtml){
+					const html = serializeHtml(cellEl.innerHTML);
+					return esc(td.turndown(html)).trim();
+				}
+				return esc(cellEl.textContent).trim();
+			};
+
+			const ths = [...table.querySelectorAll('thead th')].map(t=> t.dataset.hasHtml ? serializeHtml(t.innerHTML) : esc(t.textContent).trim());
+			const trs = [...table.querySelectorAll('tbody tr')].map(tr=> 
+				[...tr.querySelectorAll('td')].map(cellEl => getCellContent(cellEl))
+			);
+
+			const leading = '|', trailing = '|';
+			const headerLine = leading + ths.map(c=>' '+c+' ').join('|') + trailing;
+			const sepLine = leading + ths.map(()=> ' --- ').join('|') + trailing;
+			const body = trs.map(r=> leading + r.map(c=>' '+c+' ').join('|') + trailing).join('\n');
+			return [headerLine, sepLine, body].join('\n');
+		} else {
+			// Genérico
+			if(wrapper.dataset.md !== undefined) return wrapper.dataset.md;
+			// Fallback
+			if(wrapper.querySelector && wrapper.querySelector('audio')) return wrapper.innerHTML.trim();
+			const clone = wrapper.cloneNode(true);
+			clone.querySelectorAll('.editHint').forEach(e=>e.remove());
+			return td.turndown(clone.innerHTML).trim();
+		}
 	}
 
 	// context menu
@@ -1116,7 +1306,6 @@
 						ev.preventDefault(); ev.stopPropagation();
 						currentTableIdx = idx; currentTableRowIdx = rIdx;
 						preview.querySelectorAll('tr.selected-row').forEach(el=>el.classList.remove('selected-row'));
-						tr.classList.add('selected-row');
 						// descobrir coluna clicada (se houver)
 						const td = ev.target && ev.target.closest ? ev.target.closest('td') : null;
 						const colIdx = td ? Array.from(tr.children).indexOf(td) : null;
@@ -1141,9 +1330,15 @@
 				// Usam o padrão "Source on Focus"
 				wrapper.dataset.md = blk;
 				wrapper.innerHTML = md.render(blk);
+				
+				// Detectar tag principal para styling no modo source (ex: manter H1 grande)
+				const firstChild = wrapper.firstElementChild;
+				if(firstChild) wrapper.dataset.tag = firstChild.tagName.toLowerCase();
+
 				processMedia(wrapper);
 				wrapper.contentEditable = 'true';
-				wrapper.dataset.type = 'generic'; // Tipo genérico, pois o conteúdo é gerido via dataset.md
+				wrapper.dataset.type = 'generic'; // Tipo genérico
+				wrapper.classList.add('text-block'); // <--- Novo: Classe para remover estilo de "bloco" no CSS
 				setupSourceOnFocus(wrapper);
 			}
 
@@ -1288,58 +1483,10 @@
 
 	// apply block edit (DOM -> markdown)
 	function applyBlockEdit(idx, wrapper){
+		if(!wrapper.isConnected) return; // Ignorar se foi removido (ex: merge via backspace)
 		try{
-			const type = wrapper.dataset.type;
 			const blocks = splitBlocks($('editor').value);
-			let newMd = blocks[idx] || '';
-			
-			if(type === 'table'){
-				const table = wrapper.querySelector('table');
-				if(table){
-					// escape pipes e newlines para não quebrar a estrutura da tabela
-					const esc = t => (t||'').replace(/\|/g, '\\|').replace(/\r?\n/g, ' ');
-					
-					// Helper para extrair conteúdo da célula (prioriza edição ativa ou dataset.md)
-					const getCellContent = (cellEl) => {
-						// 1. Se estiver sendo editada AGORA, o textContent é o valor real (raw)
-						if(cellEl === document.activeElement) return esc(cellEl.textContent).trim();
-						// 2. Se tiver dataset.md (nossa fonte da verdade), usa ele
-						if(cellEl.dataset.md !== undefined) return esc(cellEl.dataset.md).trim();
-						// 3. Fallback para mídia/legado
-						if(cellEl.dataset.hasHtml){
-							const html = serializeHtml(cellEl.innerHTML);
-							return esc(td.turndown(html)).trim();
-						}
-						return esc(cellEl.textContent).trim();
-					};
-
-					const ths = [...table.querySelectorAll('thead th')].map(t=> t.dataset.hasHtml ? serializeHtml(t.innerHTML) : esc(t.textContent).trim());
-					
-					const trs = [...table.querySelectorAll('tbody tr')].map(tr=> 
-						[...tr.querySelectorAll('td')].map(cellEl => getCellContent(cellEl))
-					);
-
-					const leading = '|', trailing = '|';
-					const headerLine = leading + ths.map(c=>' '+c+' ').join('|') + trailing;
-					const sepLine = leading + ths.map(()=> ' --- ').join('|') + trailing;
-					const body = trs.map(r=> leading + r.map(c=>' '+c+' ').join('|') + trailing).join('\n');
-					newMd = [headerLine, sepLine, body].join('\n');
-				}
-			} else {
-				// Blocos genéricos (Texto, Lista, Código)
-				// Se tiver dataset.md, usa ele como fonte da verdade
-				if(wrapper.dataset.md !== undefined){
-					newMd = wrapper.dataset.md;
-				} else {
-					// Fallback legado (não deve ser atingido com a nova lógica)
-					if(wrapper.querySelector && wrapper.querySelector('audio')) newMd = wrapper.innerHTML.trim();
-					else {
-						const clone = wrapper.cloneNode(true);
-						clone.querySelectorAll('.editHint').forEach(e=>e.remove());
-						newMd = td.turndown(clone.innerHTML).trim();
-					}
-				}
-			}
+			const newMd = getBlockMarkdown(wrapper);
 			blocks[idx] = newMd;
 			const out = blocks.join('\n\n');
 			if(out !== $('editor').value){ 
@@ -1824,38 +1971,43 @@
 		const bar = el.querySelector('.save-progress-bar');
 		if(bar){
 			const inner = bar.querySelector('.__inner');
-			if(inner) inner.style.width = '100%';
+			if(inner) inner.style.width = '0%';
 		}
-		// esconder após animação
-		setTimeout(()=>{ el.classList.add('hidden'); el.setAttribute('aria-hidden','true'); if(bar){ const inner = bar.querySelector('.__inner'); if(inner) inner.style.width='0%'; } }, 700);
+		el.classList.add('hidden');
+		el.setAttribute('aria-hidden','true');
 	}
 
+	// --- Prompt de conexão (quando servidor local não está disponível) ---
 	function showConnectPrompt(){
-		const p = $('connectPrompt'); if(!p) return;
-		p.classList.remove('hidden'); p.setAttribute('aria-hidden','false');
-	}
-	function hideConnectPrompt(){
-		const p = $('connectPrompt'); if(!p) return;
-		p.classList.add('hidden'); p.setAttribute('aria-hidden','true');
+		const cp = $('connectPrompt');
+		if(!cp) return;
+		cp.classList.remove('hidden');
+		cp.setAttribute('aria-hidden','false');
 	}
 
-	// conectar botões do prompt
-	(function connectPromptButtons(){
-		document.addEventListener('DOMContentLoaded', ()=> {
-			const cpConnect = $('cpConnectBtn'), cpCancel = $('cpCancelBtn');
-			if(cpConnect){
-				cpConnect.addEventListener('click', async ()=>{
-					hideConnectPrompt();
-					// dispara o fluxo existente de conectar (reaproveita botão principal)
-					const el = $('connStatus');
-					if(el) el.click();
-				});
-			}
-			if(cpCancel){
-				cpCancel.addEventListener('click', ()=> hideConnectPrompt());
-			}
-		});
-	})();
+	function hideConnectPrompt(){
+		const cp = $('connectPrompt');
+		if(!cp) return;
+		cp.classList.add('hidden');
+		cp.setAttribute('aria-hidden','true');
+	}
+
+	// Conectar botões do prompt de conexão
+	document.addEventListener('DOMContentLoaded', () => {
+		const cpConnect = $('cpConnectBtn');
+		const cpCancel = $('cpCancelBtn');
+		if(cpConnect){
+			cpConnect.addEventListener('click', async ()=>{
+				hideConnectPrompt();
+				// dispara o fluxo existente de conectar (reaproveita botão principal)
+				const el = $('connStatus');
+				if(el) el.click();
+			});
+		}
+		if(cpCancel){
+			cpCancel.addEventListener('click', ()=> hideConnectPrompt());
+		}
+	});
 
 	// init
 	function init(){
@@ -2035,7 +2187,7 @@
 				} else startWidth = sidebar.getBoundingClientRect().width;
 				dragging = true; startX = t.clientX;
 				if(appEl) appEl.classList.add('sidebar-resizing');
-					});
+						});
 			window.addEventListener('touchmove', e=>{
 				if(!dragging) return;
 				const t = e.touches[0];
