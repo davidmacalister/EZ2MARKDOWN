@@ -890,7 +890,8 @@
 					wrapper.dataset.type = 'list';
 				} else {
 					const html = md.render(blk);
-					wrapper.innerHTML = html + '<span class="editHint">editar</span>';
+					// contenteditable="false" no hint para evitar cursor nele
+					wrapper.innerHTML = html + '<span class="editHint" contenteditable="false">editar</span>';
 					wrapper.contentEditable = 'true';
 					wrapper.dataset.type = 'html';
 				}
@@ -1065,8 +1066,10 @@
 			} else if(type === 'table'){
 				const table = wrapper.querySelector('table');
 				if(table){
-					const ths = [...table.querySelectorAll('thead th')].map(t=> t.dataset.hasHtml ? serializeHtml(t.innerHTML) : (t.textContent||'').trim());
-					const trs = [...table.querySelectorAll('tbody tr')].map(tr=> [...tr.querySelectorAll('td')].map(td => td.dataset.hasHtml ? serializeHtml(td.innerHTML) : (td.textContent||'').trim()));
+					// escape pipes e newlines para não quebrar a estrutura da tabela
+					const esc = t => (t||'').replace(/\|/g, '\\|').replace(/\r?\n/g, ' ');
+					const ths = [...table.querySelectorAll('thead th')].map(t=> t.dataset.hasHtml ? serializeHtml(t.innerHTML) : esc(t.textContent).trim());
+					const trs = [...table.querySelectorAll('tbody tr')].map(tr=> [...tr.querySelectorAll('td')].map(td => td.dataset.hasHtml ? serializeHtml(td.innerHTML) : esc(td.textContent).trim()));
 					const leading = '|', trailing = '|';
 					const headerLine = leading + ths.map(c=>' '+c+' ').join('|') + trailing;
 					const sepLine = leading + ths.map(()=> ' --- ').join('|') + trailing;
@@ -1075,7 +1078,12 @@
 				}
 			} else {
 				if(wrapper.querySelector && wrapper.querySelector('audio')) newMd = wrapper.innerHTML.trim();
-				else newMd = td.turndown(wrapper.innerHTML).trim();
+				else {
+					// remove o hint "editar" antes de converter para markdown
+					const clone = wrapper.cloneNode(true);
+					clone.querySelectorAll('.editHint').forEach(e=>e.remove());
+					newMd = td.turndown(clone.innerHTML).trim();
+				}
 			}
 			blocks[idx] = newMd;
 			const out = blocks.join('\n\n');
