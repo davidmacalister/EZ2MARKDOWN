@@ -17,6 +17,7 @@
 	let lastSidebarWidth = null;
 	let persistentFileHandle = null;
 	let isReorderMode = false; // <-- novo: estado do modo de reordenação
+	let isAudioEnabled = true; // <-- novo: estado dos players de áudio
 	// info temporário de drag (blockIdx, rowIdx)
 	let __dragInfo = null;
 	
@@ -298,6 +299,17 @@
 		});
 		[...root.querySelectorAll('audio')].forEach(a=>{
 			const src = a.getAttribute('src')||'';
+
+			// Se áudio estiver desativado, substituir por placeholder e não carregar blob
+			if(!isAudioEnabled){
+				const ph = document.createElement('div');
+				ph.className = 'audio-placeholder';
+				ph.textContent = '🔇 ' + (src.split('/').pop() || 'Áudio');
+				ph.title = src;
+				a.replaceWith(ph);
+				return;
+			}
+
 			const resolved = resolveMedia(src);
 			if(resolved && allFiles.has(resolved)){
 				if(gitHubRepoData){
@@ -2110,6 +2122,21 @@
 					reorderBtn.classList.remove('active');
 					preview.classList.remove('reorder-mode');
 				}
+			});
+		}
+
+		// botão toggle audio
+		const toggleAudioBtn = $('toggleAudioBtn');
+		if(toggleAudioBtn){
+			// estado inicial
+			if(isAudioEnabled) toggleAudioBtn.classList.add('active');
+			
+			toggleAudioBtn.addEventListener('click', ()=>{
+				isAudioEnabled = !isAudioEnabled;
+				if(isAudioEnabled) toggleAudioBtn.classList.add('active');
+				else toggleAudioBtn.classList.remove('active');
+				// Re-renderizar para aplicar mudança (carregar ou descarregar blobs)
+				renderPreviewFrom($('editor').value);
 			});
 		}
 
