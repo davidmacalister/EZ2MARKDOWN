@@ -7,6 +7,7 @@
 	let allFiles = new Map();
 	let mdFiles = new Map();
 	let objectUrlMap = new Map();
+	let expandedPaths = new Set(); // <-- novo: persistir estado de pastas
 	let currentName = 'untitled.md';
 	let currentTableIdx = null;
 	let currentTableRowIdx = null;
@@ -1324,18 +1325,36 @@
 					const sub = build(ch);
 					if(sub && sub.childElementCount > 0){
 						const li = document.createElement('li');
-						li.className = 'folder collapsed';
+						
+						// Lógica de expansão: se estiver filtrando, expande tudo para mostrar resultados.
+						// Se não, respeita o estado salvo em expandedPaths.
+						const isSearching = filterRaw.length > 0;
+						const isExpanded = isSearching || expandedPaths.has(ch.path);
+						
+						li.className = isExpanded ? 'folder' : 'folder collapsed';
+						
 						const row = document.createElement('div'); row.className = 'folder-row';
-						const btn = document.createElement('button'); btn.type='button'; btn.className='folder-toggle'; btn.setAttribute('aria-expanded','false');
+						const btn = document.createElement('button'); btn.type='button'; btn.className='folder-toggle'; 
+						btn.setAttribute('aria-expanded', String(isExpanded));
 						btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor"><path d="M8 5l8 7-8 7"/></svg>';
-						btn.addEventListener('click', e=>{ e.stopPropagation(); li.classList.toggle('collapsed'); btn.setAttribute('aria-expanded', String(!li.classList.contains('collapsed'))); });
+						
+						const toggleFn = (e) => {
+							e.stopPropagation();
+							li.classList.toggle('collapsed');
+							const expanded = !li.classList.contains('collapsed');
+							btn.setAttribute('aria-expanded', String(expanded));
+							if(expanded) expandedPaths.add(ch.path);
+							else expandedPaths.delete(ch.path);
+						};
+
+						btn.addEventListener('click', toggleFn);
 						row.appendChild(btn);
 						const span = document.createElement('div'); span.className='folder-label';
 						const icon = document.createElement('span'); icon.className='folder-icon';
 						icon.textContent = '📁';
 						const text = document.createElement('span'); text.textContent = ch.name;
 						span.appendChild(icon); span.appendChild(text);
-						span.addEventListener('click', e=>{ e.stopPropagation(); li.classList.toggle('collapsed'); btn.setAttribute('aria-expanded', String(!li.classList.contains('collapsed'))); });
+						span.addEventListener('click', toggleFn);
 						row.appendChild(span);
 						li.appendChild(row);
 						li.appendChild(sub);
@@ -1560,7 +1579,7 @@
 					const treeData = await treeRes.json();
 
 					// 3. Resetar estado
-					revokeObjectUrls(); allFiles.clear(); mdFiles.clear();
+					revokeObjectUrls(); allFiles.clear(); mdFiles.clear(); expandedPaths.clear();
 					gitHubRepoData = { owner, repo: repoName, branch };
 
 					// 4. Popular allFiles com arquivos "dummy" (vazios)
@@ -1589,7 +1608,7 @@
 
 		// open folder (input fallback)
 		folderInput.addEventListener('change', (e)=>{
-			revokeObjectUrls(); allFiles.clear(); mdFiles.clear();
+			revokeObjectUrls(); allFiles.clear(); mdFiles.clear(); expandedPaths.clear();
 			gitHubRepoData = null; // resetar modo GitHub
 			Array.from(e.target.files||[]).forEach(f=>{ const rel = f.webkitRelativePath||f.name; allFiles.set(rel,f); if(/\.md$/i.test(f.name)) mdFiles.set(rel,f); });
 			renderExplorerUI(); folderInput.value = '';
