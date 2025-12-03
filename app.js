@@ -315,7 +315,18 @@
 
 	// Helper para comportamento "Source on Focus"
 	function setupSourceOnFocus(wrapper){
+		// Hack: Evitar que clicar em controles de mídia (audio/video) ative o modo de edição
+		let ignoreFocus = false;
+		wrapper.addEventListener('mousedown', function(e){
+			const t = e.target;
+			if(t.tagName === 'AUDIO' || t.tagName === 'VIDEO' || t.closest('audio, video')){
+				ignoreFocus = true;
+				setTimeout(()=> ignoreFocus = false, 200);
+			}
+		});
+
 		wrapper.addEventListener('focus', function(){
+			if(ignoreFocus){ ignoreFocus = false; return; }
 			if(this.dataset.mode === 'source') return;
 			this.dataset.mode = 'source';
 			// Mostra o markdown original
@@ -323,6 +334,7 @@
 			this.classList.add('source-mode');
 		});
 		wrapper.addEventListener('blur', function(){
+			if(this.dataset.mode !== 'source') return; // Ignora se não estava editando
 			this.dataset.mode = 'preview';
 			const newSrc = this.textContent;
 			this.dataset.md = newSrc;
@@ -690,6 +702,10 @@
 			return [headerLine, sepLine, body].join('\n');
 		} else {
 			// Genérico
+			// Correção: Se estiver em modo source, o textContent é o valor mais atual (ainda não salvo no dataset.md)
+			if(wrapper.classList.contains('source-mode') || wrapper.dataset.mode === 'source'){
+				return wrapper.textContent;
+			}
 			if(wrapper.dataset.md !== undefined) return wrapper.dataset.md;
 			// Fallback
 			if(wrapper.querySelector && wrapper.querySelector('audio')) return wrapper.innerHTML.trim();
@@ -1210,6 +1226,7 @@
 							tdEl.dataset.hasHtml = '1';
 							tdEl.contentEditable = 'false';
 							tdEl.addEventListener('dblclick', ()=> openCellModal(tdEl, idx));
+							processMedia(tdEl); // <--- Adicionado: Resolver URLs de mídia (blob) na tabela
 						} else {
 							// Texto: Renderiza HTML visualmente, mas edita o fonte (Markdown)
 							tdEl.innerHTML = md.renderInline(cell);
@@ -1840,7 +1857,7 @@
 					});
 					a.addEventListener('mousedown', () => {
 						hidePreviewPopup(); // Fecha imediatamente ao clicar
-					});
+						});
 
 					li.appendChild(a);
 					makeExplorerDraggable(li, ch.path);
