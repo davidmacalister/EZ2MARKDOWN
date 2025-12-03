@@ -2,7 +2,7 @@
 	// depende de markdown-it e turndown (carregados no HTML)
 	const md = window.markdownit({html:true,linkify:true});
 	const td = new window.TurndownService();
-	td.keep(['audio', 'video', 'source']); // Manter tags de áudio/vídeo ao converter HTML->MD
+	td.keep(['audio', 'video', 'source', 'br']); // Manter tags de áudio/vídeo e quebras de linha ao converter HTML->MD
 
 	// estado
 	let allFiles = new Map();
@@ -871,18 +871,35 @@
 						const tr = document.createElement('tr');
 						row.forEach((cell, cIdx)=>{ // <-- agora temos cIdx
 							const tdEl = document.createElement('td');
-							// Detectar imagem Markdown ou tags HTML de mídia
-							const isMdImg = /!\[.*?\]\(.*?\)/.test(cell);
-							if(/<\s*(audio|img|video)/i.test(cell) || isMdImg){
-								if(isMdImg) tdEl.innerHTML = md.renderInline(cell);
-								else tdEl.innerHTML = cell;
-								
+							 // Armazenar o Markdown original como fonte da verdade
+							tdEl.dataset.md = cell;
+
+							// Detectar mídia (não editável diretamente via texto)
+							const isMedia = /!\[.*?\]\(.*?\)|<\s*(audio|img|video)/i.test(cell);
+
+							if(isMedia){
+								tdEl.innerHTML = md.renderInline(cell);
 								tdEl.dataset.hasHtml = '1';
 								tdEl.contentEditable = 'false';
 								tdEl.addEventListener('dblclick', ()=> openCellModal(tdEl, idx));
 							} else {
-								tdEl.textContent = cell;
+								// Texto: Renderiza HTML visualmente, mas edita o fonte (Markdown)
+								tdEl.innerHTML = md.renderInline(cell);
 								tdEl.contentEditable = 'true';
+
+								// Ao focar (clicar): mostra o código fonte (ex: <br>, `code`)
+								tdEl.addEventListener('focus', function(){
+									// Usa o dataset.md para garantir que pegamos o original
+									this.textContent = this.dataset.md || '';
+								});
+
+								// Ao sair (blur): salva o novo fonte e renderiza novamente
+								tdEl.addEventListener('blur', function(){
+									const newRaw = this.textContent;
+									this.dataset.md = newRaw;
+									this.innerHTML = md.renderInline(newRaw);
+									// Nota: applyBlockEdit será chamado em seguida pelo blur do wrapper
+								});
 							}
 							// clique simples: registra célula atual
 							tdEl.addEventListener('click', (ev)=>{
@@ -1178,16 +1195,27 @@
 				if(table){
 					// escape pipes e newlines para não quebrar a estrutura da tabela
 					const esc = t => (t||'').replace(/\|/g, '\\|').replace(/\r?\n/g, ' ');
-					const ths = [...table.querySelectorAll('thead th')].map(t=> t.dataset.hasHtml ? serializeHtml(t.innerHTML) : esc(t.textContent).trim());
-					// Alterado: usar 'cellEl' para não conflitar com 'td' (TurndownService) e converter HTML de volta para MD
-					const trs = [...table.querySelectorAll('tbody tr')].map(tr=> [...tr.querySelectorAll('td')].map(cellEl => {
+					
+					// Helper para extrair conteúdo da célula (prioriza edição ativa ou dataset.md)
+					const getCellContent = (cellEl) => {
+						// 1. Se estiver sendo editada AGORA, o textContent é o valor real (raw)
+						if(cellEl === document.activeElement) return esc(cellEl.textContent).trim();
+						// 2. Se tiver dataset.md (nossa fonte da verdade), usa ele
+						if(cellEl.dataset.md !== undefined) return esc(cellEl.dataset.md).trim();
+						// 3. Fallback para mídia/legado
 						if(cellEl.dataset.hasHtml){
 							const html = serializeHtml(cellEl.innerHTML);
-							// Converte HTML de volta para Markdown (ex: img -> ![]), preservando audio/video
 							return esc(td.turndown(html)).trim();
 						}
 						return esc(cellEl.textContent).trim();
-					}));
+					};
+
+					const ths = [...table.querySelectorAll('thead th')].map(t=> t.dataset.hasHtml ? serializeHtml(t.innerHTML) : esc(t.textContent).trim());
+					
+					const trs = [...table.querySelectorAll('tbody tr')].map(tr=> 
+						[...tr.querySelectorAll('td')].map(cellEl => getCellContent(cellEl))
+					);
+
 					const leading = '|', trailing = '|';
 					const headerLine = leading + ths.map(c=>' '+c+' ').join('|') + trailing;
 					const sepLine = leading + ths.map(()=> ' --- ').join('|') + trailing;
@@ -1227,6 +1255,10 @@
 		if(apply && editingCell){
 			const {td, blockIdx} = editingCell;
 			const v = me.value;
+			
+			// Atualizar dataset.md também ao usar o modal
+			td.dataset.md = v;
+
 			if(/<\s*(audio|img|video)/i.test(v)){ td.innerHTML = v; td.dataset.hasHtml = '1'; }
 			else { td.textContent = v; td.removeAttribute('data-has-html'); }
 			const wrapper = $('preview').querySelector(`.block[data-idx="${blockIdx}"]`);
@@ -1894,7 +1926,7 @@
 				} else startWidth = sidebar.getBoundingClientRect().width;
 				dragging = true; startX = t.clientX;
 				if(appEl) appEl.classList.add('sidebar-resizing');
-				});
+					});
 			window.addEventListener('touchmove', e=>{
 				if(!dragging) return;
 				const t = e.touches[0];
