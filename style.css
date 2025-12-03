@@ -479,7 +479,7 @@ pre::-webkit-scrollbar-thumb:hover,
 .table-with-handles .handles-col{
 	/* agora posicionamento relativo para conter handles posicionados absolutamente */
 	position: relative;
-	display:block;
+	display:none; /* Oculto por padrão (modo edição de conteúdo/drag de arquivos) */
 	/* padding-top será calculado dinamicamente para alinhar com thead */
 	padding-top:0;
 	/* fixa largura do gutter de handles */
@@ -489,6 +489,12 @@ pre::-webkit-scrollbar-thumb:hover,
 	gap: 0;
 	/* garantir que não force layout extra (altura controlada via JS) */
 	overflow: visible;
+	transition: top .08s ease, height .12s ease; /* animação suave opcional */
+}
+
+/* Mostrar handles apenas quando o modo de reordenação estiver ativo no preview */
+#preview.reorder-mode .table-with-handles .handles-col {
+	display: block;
 }
 
 /* cada handle (fora da tabela) - agora absolute para posicionamento preciso */
@@ -518,6 +524,14 @@ pre::-webkit-scrollbar-thumb:hover,
 	font-weight:700;
 	opacity:0.85;
 	line-height:1;
+}
+
+/* Estado ativo do botão de reordenar */
+.header-actions button.active {
+	background: rgba(255,255,255,0.1);
+	color: var(--accent);
+	border-color: var(--accent);
+	box-shadow: 0 0 8px rgba(75,122,79,0.2);
 }
 
 /* alinhar tabela para ocupar o restante */

@@ -13,6 +13,7 @@
 	let currentTableColIdx = null; // <-- novo: coluna atualmente clicada
 	let lastSidebarWidth = null;
 	let persistentFileHandle = null;
+	let isReorderMode = false; // <-- novo: estado do modo de reordenação
 	// info temporário de drag (blockIdx, rowIdx)
 	let __dragInfo = null;
 
@@ -780,65 +781,8 @@
 
 					table.appendChild(tbody);
 
-					 
-					// centraliza dragover: calcula alvo pela posição Y e aplica .drop-target
-					tbody.addEventListener('dragover', (e)=>{
-						e.preventDefault();
-						e.dataTransfer.dropEffect = 'move';
-						const rows = Array.from(tbody.querySelectorAll('tr'));
-						if(rows.length===0) return;
-						// limpar alvos
-						rows.forEach(r=>r.classList.remove('drop-target'));
-						let targetIdx = rows.length - 1;
-						for(let i=0;i<rows.length;i++){
-							const r = rows[i];
-							const rect = r.getBoundingClientRect();
-							const mid = rect.top + rect.height/2;
-							if(e.clientY < mid){ targetIdx = i; break; }
-						}
-						// marca a linha alvo (se for a última, marca a última)
-						const tgt = rows[targetIdx] || rows[rows.length-1];
-						if(tgt) tgt.classList.add('drop-target');
-					});
-					// limpar estado ao sair do tbody
-					tbody.addEventListener('dragleave', (e)=>{
-						if(!e.relatedTarget || !tbody.contains(e.relatedTarget)) tbody.querySelectorAll('tr.drop-target').forEach(t=>t.classList.remove('drop-target'));
-					});
-					// drop: efetiva reordenação
-					tbody.addEventListener('drop', (e)=>{
-						e.preventDefault();
-						if(!__dragInfo) return;
-						const rows = Array.from(tbody.querySelectorAll('tr'));
-						if(rows.length===0) return;
-						let toIdx = rows.length - 1;
-						for(let i=0;i<rows.length;i++){
-							const r = rows[i];
-							const rect = r.getBoundingClientRect();
-							const mid = rect.top + rect.height/2;
-							if(e.clientY < mid){ toIdx = i; break; }
-						}
-						const fromIdx = __dragInfo.rowIdx;
-						if(fromIdx === toIdx){ tbody.querySelectorAll('tr.drop-target').forEach(t=>t.classList.remove('drop-target')); return; }
-						const parsedLocal = parseTable(splitBlocks($('editor').value)[idx] || '');
-						const moved = parsedLocal.rows.splice(fromIdx,1)[0];
-						let insertAt = toIdx;
-						if(fromIdx < toIdx) insertAt = toIdx;
-						parsedLocal.rows.splice(insertAt,0,moved);
-						const leading = parsedLocal.leading ? '|' : '';
-						const trailing = parsedLocal.trailing ? '|' : '';
-						const headerLine = leading + parsedLocal.headers.map(c=>' '+c+' ').join('|') + (trailing? '|':'');
-						const sepLine = leading + (parsedLocal.aligns || parsedLocal.headers.map(()=> 'default')).map(a=>{
-							if(a==='left') return ':---';
-							if(a==='right') return '---:';
-							if(a==='center') return ':---:';
-							return '---';
-						}).map(s=>' '+s+' ').join('|') + (trailing? '|':'');
-						const body = parsedLocal.rows.map(r=> leading + r.map(c=>' '+c+' ').join('|') + (trailing? '|':'')).join('\n');
-						const blocks = splitBlocks($('editor').value);
-						blocks[idx] = [headerLine, sepLine, body].join('\n');
-						$('editor').value = blocks.join('\n\n');
-						renderPreviewFrom($('editor').value);
-					});
+					// REMOVIDO: Listeners de dragover/drop do tbody foram movidos para enablePreviewDrop
+					// para evitar conflitos e centralizar a lógica.
 
 					// colocar handles e table no wrapper
 					wrapperTable.appendChild(handlesCol);
@@ -1121,11 +1065,13 @@
 		if(a){
 			a.draggable = true;
 			a.addEventListener('dragstart', (e)=>{
+				__dragInfo = null; // garante limpeza de estado (não é reordenação)
 				e.dataTransfer.setData('text/plain', relPath);
 				e.dataTransfer.effectAllowed = 'copy';
 			});
 		}
 		li.addEventListener('dragstart', (e)=>{
+			__dragInfo = null; // garante limpeza de estado
 			if(!e.dataTransfer.getData('text/plain')){
 				e.dataTransfer.setData('text/plain', relPath);
 				e.dataTransfer.effectAllowed = 'copy';
@@ -1137,22 +1083,143 @@
 	function enablePreviewDrop(){
 		const preview = $('preview');
 		if(!preview) return;
-		// dragover: se estiver arrastando arquivos use copy, senão (drag interno) use move
+
+		// Helper para limpar classes visuais de drop
+		const clearDropTargets = () => {
+			preview.querySelectorAll('.drop-target').forEach(t=>t.classList.remove('drop-target'));
+		};
+
+		// Centraliza dragover
 		preview.addEventListener('dragover', (e)=>{
 			e.preventDefault();
+
+			// 1. Lógica de Reordenação (se ativo e arrastando linha)
+			if(isReorderMode && __dragInfo){
+				e.dataTransfer.dropEffect = 'move';
+				
+				const target = e.target;
+				const tbody = target.closest('tbody');
+				
+				// Se não estiver sobre um corpo de tabela, limpa e retorna
+				if(!tbody) {
+					clearDropTargets();
+					return;
+				}
+
+				const rows = Array.from(tbody.querySelectorAll('tr'));
+				if(rows.length === 0) return;
+
+				// Limpa alvos anteriores
+				clearDropTargets();
+
+				// Calcula índice baseado no Y
+				let targetIdx = rows.length - 1;
+				for(let i=0; i<rows.length; i++){
+					const r = rows[i];
+					const rect = r.getBoundingClientRect();
+					const mid = rect.top + rect.height/2;
+					if(e.clientY < mid){ targetIdx = i; break; }
+				}
+
+				// Marca visualmente a linha alvo
+				const tgt = rows[targetIdx] || rows[rows.length-1];
+				if(tgt) tgt.classList.add('drop-target');
+				
+				return; // Processado como reorder
+			}
+
+			// 2. Lógica de Arquivos (se não for reorder)
+			clearDropTargets(); // Garante limpeza visual
+
 			const types = Array.from(e.dataTransfer.types || []);
 			const isFiles = types.includes && (types.includes('Files') || types.includes('application/x-moz-file'));
-			e.dataTransfer.dropEffect = isFiles ? 'copy' : 'move';
+			const isText = types.includes && types.includes('text/plain');
+			
+			if(isFiles || isText){
+				e.dataTransfer.dropEffect = 'copy';
+			} else {
+				e.dataTransfer.dropEffect = 'none';
+			}
 		});
+
+		// Limpeza ao sair
+		preview.addEventListener('dragleave', (e)=>{
+			if(e.relatedTarget && !preview.contains(e.relatedTarget)){
+				clearDropTargets();
+			}
+		});
+
+		// Centraliza drop
 		preview.addEventListener('drop', (e)=>{
 			e.preventDefault();
-			// se for drag interno (nossas linhas) a tbody trata o reorder — aqui só processamos arquivos externos
-			const hasFiles = (e.dataTransfer.files && e.dataTransfer.files.length>0);
-			if(!hasFiles) return;
+			clearDropTargets();
 
-			// processa o primeiro arquivo relativo/path (mantive a lógica anterior)
-			const rel = e.dataTransfer.getData('text/plain') || (e.dataTransfer.files[0] && e.dataTransfer.files[0].name);
+			// 1. Drop de Reordenação
+			if(isReorderMode && __dragInfo){
+				const target = e.target;
+				const tbody = target.closest('tbody');
+				if(!tbody) return;
+
+				const rows = Array.from(tbody.querySelectorAll('tr'));
+				if(rows.length === 0) return;
+
+				let toIdx = rows.length - 1;
+				for(let i=0; i<rows.length; i++){
+					const r = rows[i];
+					const rect = r.getBoundingClientRect();
+					const mid = rect.top + rect.height/2;
+					if(e.clientY < mid){ toIdx = i; break; }
+				}
+
+				const fromIdx = __dragInfo.rowIdx;
+				const blockIdx = __dragInfo.blockIdx;
+				
+				// Verifica se estamos na mesma tabela (blockIdx)
+				const blockEl = tbody.closest('.block');
+				if(!blockEl || Number(blockEl.dataset.idx) !== blockIdx) return;
+
+				if(fromIdx === toIdx) return;
+
+				// Executa a troca no markdown
+				const parsedLocal = parseTable(splitBlocks($('editor').value)[blockIdx] || '');
+				if(!parsedLocal.rows[fromIdx]) return;
+
+				const moved = parsedLocal.rows.splice(fromIdx,1)[0];
+				let insertAt = toIdx;
+				if(fromIdx < toIdx) insertAt = toIdx;
+
+				parsedLocal.rows.splice(insertAt,0,moved);
+
+				// Reconstrói tabela
+				const leading = parsedLocal.leading ? '|' : '';
+				const trailing = parsedLocal.trailing ? '|' : '';
+				const headerLine = leading + parsedLocal.headers.map(c=>' '+c+' ').join('|') + (trailing? '|':'');
+				const sepLine = leading + (parsedLocal.aligns || parsedLocal.headers.map(()=> 'default')).map(a=>{
+					if(a==='left') return ':---';
+					if(a==='right') return '---:';
+					if(a==='center') return ':---:';
+					return '---';
+				}).map(s=>' '+s+' ').join('|') + (trailing? '|':'');
+				const body = parsedLocal.rows.map(r=> leading + r.map(c=>' '+c+' ').join('|') + (trailing? '|':'')).join('\n');
+				
+				const blocks = splitBlocks($('editor').value);
+				blocks[blockIdx] = [headerLine, sepLine, body].join('\n');
+				$('editor').value = blocks.join('\n\n');
+				
+				__dragInfo = null;
+				renderPreviewFrom($('editor').value);
+				return;
+			}
+
+			// 2. Drop de Arquivos
+			const hasFiles = (e.dataTransfer.files && e.dataTransfer.files.length>0);
+			const hasText = e.dataTransfer.getData('text/plain');
+			
+			if(!hasFiles && !hasText) return;
+
+			const rel = hasText || (e.dataTransfer.files[0] && e.dataTransfer.files[0].name);
 			if(!rel) return;
+			
 			const ext = rel.split('.').pop().toLowerCase();
 			let tag = '';
 			if(['mp3','wav','ogg','m4a'].includes(ext)) tag = `<audio controls src="${rel}" title="${rel}"></audio>`;
@@ -1163,6 +1230,8 @@
 			const editor = $('editor');
 			const tdEl = e.target && e.target.closest ? e.target.closest('td') : null;
 			const blockEl = e.target && e.target.closest ? e.target.closest('.block') : null;
+			
+			// Se soltou numa célula de tabela
 			if(blockEl && blockEl.dataset && blockEl.dataset.type === 'table'){
 				const blockIdx = Number(blockEl.dataset.idx);
 				let targetCell = tdEl;
@@ -1181,7 +1250,7 @@
 				}
 			}
 
-			// fallback para inserir no editor bruto
+			 // Fallback: inserir no editor/final
 			if(editor && rawPanel && !rawPanel.classList.contains('hidden') && document.activeElement === editor){
 				insertAtCursor(editor, '\n\n' + tag + '\n');
 				renderPreviewFrom(editor.value);
@@ -1206,7 +1275,7 @@
 		for(const k of allFiles.keys()){
 			const parts = k.split('/');
 			let node = tree;
-			for(let i=0;i<parts.length;i++){
+			for(let i=0; i<parts.length;i++){
 				const p = parts[i];
 				node.children = node.children || {};
 				if(!node.children[p]) node.children[p] = {name:p, children:{}, path: parts.slice(0,i+1).join('/')};
@@ -1427,6 +1496,22 @@
 			Array.from(e.target.files||[]).forEach(f=>{ const rel = f.webkitRelativePath||f.name; allFiles.set(rel,f); if(/\.md$/i.test(f.name)) mdFiles.set(rel,f); });
 			renderExplorerUI(); folderInput.value = '';
 		});
+
+		// botão reordenar
+		const reorderBtn = $('reorderBtn');
+		if(reorderBtn){
+			reorderBtn.addEventListener('click', ()=>{
+				isReorderMode = !isReorderMode;
+				const preview = $('preview');
+				if(isReorderMode){
+					reorderBtn.classList.add('active');
+					preview.classList.add('reorder-mode');
+				} else {
+					reorderBtn.classList.remove('active');
+					preview.classList.remove('reorder-mode');
+				}
+			});
+		}
 
 		// raw panel toggle
 		const toggleRawBtn = $('toggleRawBtn'), rawPanel = $('rawPanel'), rawApply=$('rawApply'), rawClose=$('rawClose'), rawCancel=$('rawCancel');
