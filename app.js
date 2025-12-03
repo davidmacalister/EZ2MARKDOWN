@@ -16,6 +16,9 @@
 	let isReorderMode = false; // <-- novo: estado do modo de reordenação
 	// info temporário de drag (blockIdx, rowIdx)
 	let __dragInfo = null;
+	
+	// GitHub integration state
+	let gitHubRepoData = null; // { owner, repo, branch }
 
 	// ConnectionManager centraliza ping, pickFolder, save e fallback HTTPS
 	class ConnectionManager {
@@ -240,6 +243,14 @@
 		const simple = src.replace(/^\.*\/+/, '');
 		for(const k of allFiles.keys()) if(k.endsWith(src) || k.endsWith(simple)) return k;
 		return null;
+	}
+
+	// Helper para obter URL raw do GitHub se estivermos nesse modo
+	function getGitHubRawUrl(path){
+		if(!gitHubRepoData || !path) return null;
+		// codificar path para URL
+		const safePath = path.split('/').map(encodeURIComponent).join('/');
+		return `https://raw.githubusercontent.com/${gitHubRepoData.owner}/${gitHubRepoData.repo}/${gitHubRepoData.branch}/${safePath}`;
 	}
 
 	function revokeObjectUrls(){
@@ -846,18 +857,31 @@
 				const src = img.getAttribute('src')||'';
 				const resolved = resolveMedia(src);
 				if(resolved && allFiles.has(resolved)){
-					const file = allFiles.get(resolved); const url = URL.createObjectURL(file);
-					objectUrlMap.set(resolved, url); if(!img.dataset.srcOriginal) img.dataset.srcOriginal = src;
-					img.src = url; img.contentEditable = 'false';
+					// Se estiver em modo GitHub, usar URL raw direta em vez de blob
+					if(gitHubRepoData){
+						img.src = getGitHubRawUrl(resolved);
+						if(!img.dataset.srcOriginal) img.dataset.srcOriginal = src;
+						img.contentEditable = 'false';
+					} else {
+						const file = allFiles.get(resolved); const url = URL.createObjectURL(file);
+						objectUrlMap.set(resolved, url); if(!img.dataset.srcOriginal) img.dataset.srcOriginal = src;
+						img.src = url; img.contentEditable = 'false';
+					}
 				}
 			});
 			[...wrapper.querySelectorAll('audio')].forEach(a=>{
 				const src = a.getAttribute('src')||'';
 				const resolved = resolveMedia(src);
 				if(resolved && allFiles.has(resolved)){
-					const file = allFiles.get(resolved); const url = URL.createObjectURL(file);
-					objectUrlMap.set(resolved, url); if(!a.dataset.srcOriginal) a.dataset.srcOriginal = src;
-					a.src = url; a.contentEditable = 'false'; a.controls = true;
+					if(gitHubRepoData){
+						a.src = getGitHubRawUrl(resolved);
+						if(!a.dataset.srcOriginal) a.dataset.srcOriginal = src;
+						a.contentEditable = 'false'; a.controls = true;
+					} else {
+						const file = allFiles.get(resolved); const url = URL.createObjectURL(file);
+						objectUrlMap.set(resolved, url); if(!a.dataset.srcOriginal) a.dataset.srcOriginal = src;
+						a.src = url; a.contentEditable = 'false'; a.controls = true;
+					}
 				}
 			});
 
@@ -1353,9 +1377,30 @@
 		if(built) ul.appendChild(built);
 		else { const li=document.createElement('li'); li.className='empty'; li.textContent='Nenhum arquivo'; ul.appendChild(li); }
 
-		function openMd(path){
-			const f = allFiles.get(path);
+		async function openMd(path){
+			let f = allFiles.get(path);
 			if(!f) return;
+
+			// Lazy Load para GitHub: se o arquivo estiver vazio (dummy), baixar conteúdo
+			if(gitHubRepoData && f.size === 0){
+				const rawUrl = getGitHubRawUrl(path);
+				try {
+					$('editor').value = 'Carregando do GitHub...';
+					renderPreviewFrom('Carregando...');
+					const res = await fetch(rawUrl);
+					if(!res.ok) throw new Error('HTTP ' + res.status);
+					const txt = await res.text();
+					// Atualizar o arquivo no mapa com o conteúdo real
+					f = new File([txt], path.split('/').pop(), {type: 'text/markdown'});
+					allFiles.set(path, f);
+				} catch(e) {
+					alert('Erro ao baixar arquivo do GitHub: ' + e.message);
+					$('editor').value = '';
+					renderPreviewFrom('');
+					return;
+				}
+			}
+
 			const r = new FileReader();
 			r.onload = ()=>{ $('editor').value = String(r.result); currentName = path; $('currentFilename').textContent = currentName; renderPreviewFrom($('editor').value); };
 			r.readAsText(f);
@@ -1490,9 +1535,62 @@
 			folderInput.click();
 		});
 
+		// GitHub Open Button
+		const openGhBtn = $('openGhBtn');
+		if(openGhBtn){
+			openGhBtn.addEventListener('click', async ()=>{
+				const repo = prompt('Digite o repositório (ex: usuario/repo):', 'microsoft/vscode-docs');
+				if(!repo) return;
+				const parts = repo.split('/');
+				if(parts.length < 2) return alert('Formato inválido. Use usuario/repo');
+				
+				const owner = parts[0].trim();
+				const repoName = parts[1].trim();
+				
+				try {
+					// 1. Obter info do repo para saber branch default
+					const infoRes = await fetch(`https://api.github.com/repos/${owner}/${repoName}`);
+					if(!infoRes.ok) throw new Error('Repositório não encontrado ou privado.');
+					const info = await infoRes.json();
+					const branch = info.default_branch || 'main';
+
+					// 2. Obter árvore de arquivos recursiva
+					const treeRes = await fetch(`https://api.github.com/repos/${owner}/${repoName}/git/trees/${branch}?recursive=1`);
+					if(!treeRes.ok) throw new Error('Erro ao ler arquivos.');
+					const treeData = await treeRes.json();
+
+					// 3. Resetar estado
+					revokeObjectUrls(); allFiles.clear(); mdFiles.clear();
+					gitHubRepoData = { owner, repo: repoName, branch };
+
+					// 4. Popular allFiles com arquivos "dummy" (vazios)
+					// O conteúdo será baixado sob demanda em openMd
+					let count = 0;
+					for(const item of treeData.tree){
+						if(item.type === 'blob'){
+							const path = item.path;
+							// Criar arquivo vazio apenas para constar na lista
+							const dummy = new File([], path.split('/').pop());
+							allFiles.set(path, dummy);
+							if(/\.md$/i.test(path)) mdFiles.set(path, dummy);
+							count++;
+						}
+					}
+					
+					renderExplorerUI();
+					alert(`Repositório carregado: ${count} arquivos.`);
+
+				} catch(e){
+					console.error(e);
+					alert('Erro ao carregar GitHub: ' + e.message);
+				}
+			});
+		}
+
 		// open folder (input fallback)
 		folderInput.addEventListener('change', (e)=>{
 			revokeObjectUrls(); allFiles.clear(); mdFiles.clear();
+			gitHubRepoData = null; // resetar modo GitHub
 			Array.from(e.target.files||[]).forEach(f=>{ const rel = f.webkitRelativePath||f.name; allFiles.set(rel,f); if(/\.md$/i.test(f.name)) mdFiles.set(rel,f); });
 			renderExplorerUI(); folderInput.value = '';
 		});

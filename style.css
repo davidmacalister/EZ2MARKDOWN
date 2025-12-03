@@ -21,13 +21,15 @@ body{margin:0;font-family:Inter, "Segoe UI", Roboto, Arial, sans-serif;backgroun
 .explorer{flex:1;overflow:auto}
 .explorer-title{font-size:12px;color:var(--muted-dim);margin-bottom:6px}
 #fileList{list-style:none;padding:0;margin:0}
-#fileList li{padding:6px 8px;border-radius:6px;color:var(--muted);font-size:13px;cursor:pointer}
-#fileList li:hover{background:rgba(255,255,255,0.02)}
+/* Alterado: remove padding e hover do li para evitar highlights aninhados */
+#fileList li{padding:0;border-radius:0;color:var(--muted);font-size:13px;cursor:default}
+#fileList li:hover{background:transparent}
 
 /* explorer improved styles */
 /* substituir `display:flex` nos li por block para que filhos apareçam em coluna */
 .explorer ul{list-style:none;padding-left:8px;margin:6px 0;display:block}
-.explorer li{padding:2px 4px;border-radius:4px;line-height:1.6;display:block;min-width:0} /* <-- change: block layout and min-width */
+/* Alterado: remove padding do li */
+.explorer li{padding:0;border-radius:0;line-height:1.6;display:block;min-width:0} 
 .explorer li.folder{cursor:default}
 
 /* nova linha que contém toggle + label (mantém ambos sempre na mesma linha) */
@@ -38,6 +40,11 @@ body{margin:0;font-family:Inter, "Segoe UI", Roboto, Arial, sans-serif;backgroun
 	padding:2px 6px;   /* menos padding vertical */
 	border-radius:4px; /* menos arredondado */
 	font-size:13px;
+	cursor: pointer;
+}
+/* Novo: hover na linha da pasta */
+.explorer .folder-row:hover{
+	background:rgba(255,255,255,0.02);
 }
 
 /* manter layout horizontal apenas no label do nó (ícone + nome) */
@@ -77,13 +84,15 @@ body{margin:0;font-family:Inter, "Segoe UI", Roboto, Arial, sans-serif;backgroun
 	width:16px;
 	height:16px;
 }
-.explorer a.file-link{color:var(--muted);text-decoration:none;display:flex;align-items:center;gap:6px;flex:1}
+/* Alterado: adiciona padding e radius ao link do arquivo para compensar a remoção do padding do li */
+.explorer a.file-link{color:var(--muted);text-decoration:none;display:flex;align-items:center;gap:6px;flex:1; padding:2px 6px; border-radius:4px;}
 .explorer a.file-link:hover{background:rgba(255,255,255,0.02);color:var(--accent)}
 .explorer .file-icon{opacity:0.9;color:var(--muted-dim);font-size:12px}
 
 /* children list controlled by li.collapsed: ficam abaixo e recuadas (indent) */
 .explorer li.collapsed > ul.children{display:none}
-.explorer ul.children{padding-left:12px;margin-top:4px;}
+/* Alterado: Aumentado para 16px e adicionado !important para garantir a indentação visual */
+.explorer ul.children{padding-left:16px !important;margin-top:4px;}
 
 /* small touch: show file name truncated */
 .explorer a.file-link span.name{
@@ -395,10 +404,16 @@ pre::-webkit-scrollbar-thumb:hover,
 }
 
 /* remover qualquer marcador (bolinha) no explorer / file list */
-.explorer, #fileList, .explorer ul, #fileList ul {
+/* Alterado: Separado para não zerar o padding dos ULs aninhados (filhos) */
+.explorer, #fileList {
 	list-style: none !important;
 	margin: 0;
 	padding-left: 0 !important;
+}
+.explorer ul, #fileList ul {
+	list-style: none !important;
+	margin: 0;
+	/* padding-left removido daqui para respeitar a regra .explorer ul.children */
 }
 
 /* garantir que cada li não mostre marker (compatibilidade com ::marker) */
