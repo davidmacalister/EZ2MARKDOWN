@@ -593,6 +593,12 @@ pre::-webkit-scrollbar-thumb:hover,
 	box-shadow: 0 0 8px rgba(75,122,79,0.2);
 }
 
+/* Botão de login ativo (logado) */
+#ghLoginBtn.logged-in {
+	color: #67f56d;
+	border-color: rgba(103, 245, 109, 0.3);
+}
+
 /* alinhar tabela para ocupar o restante */
 .table-with-handles table.md-table{
 	flex:1 1 auto;

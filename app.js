@@ -54,6 +54,20 @@
 
 	// GitHub integration state
 	let gitHubRepoData = null; // { owner, repo, branch }
+	let gitHubToken = localStorage.getItem('ez2_gh_token') || null; // <-- novo: token persistido
+
+	// Helper para fetch autenticado no GitHub
+	async function ghFetch(url, opts = {}) {
+		const headers = opts.headers || {};
+		if (gitHubToken) {
+			headers['Authorization'] = `Bearer ${gitHubToken}`;
+		}
+		// Se não for raw content explícito, pedir JSON v3
+		if (!headers['Accept']) {
+			headers['Accept'] = 'application/vnd.github.v3+json';
+		}
+		return fetch(url, { ...opts, headers });
+	}
 
 	// ConnectionManager centraliza ping, pickFolder, save e fallback HTTPS
 	class ConnectionManager {
@@ -539,9 +553,23 @@
 	// Helper para obter URL raw do GitHub se estivermos nesse modo
 	function getGitHubRawUrl(path){
 		if(!gitHubRepoData || !path) return null;
-		// codificar path para URL
+			// Se tiver token, não podemos usar raw.githubusercontent diretamente em tags <img> 
+		// pois não conseguimos passar headers.
+		// Retornamos a URL da API de conteúdo, mas isso requer tratamento especial no fetch.
+		// Para simplificar compatibilidade visual sem token:
 		const safePath = path.split('/').map(encodeURIComponent).join('/');
+		
+		// Se for privado (tem token), o ideal seria usar blob, mas para preview rápido:
+		// Retorna URL raw padrão. Se for privado, vai falhar (404) em tags <img> normais.
+		// A solução completa exigiria baixar o blob e criar ObjectURL para cada imagem.
 		return `https://raw.githubusercontent.com/${gitHubRepoData.owner}/${gitHubRepoData.repo}/${gitHubRepoData.branch}/${safePath}`;
+	}
+
+	// Helper para obter URL da API para baixar conteúdo (suporta Token)
+	function getGitHubApiContentUrl(path) {
+		if(!gitHubRepoData || !path) return null;
+		const safePath = path.split('/').map(encodeURIComponent).join('/');
+		return `https://api.github.com/repos/${gitHubRepoData.owner}/${gitHubRepoData.repo}/contents/${safePath}?ref=${gitHubRepoData.branch}`;
 	}
 
 	function revokeObjectUrls(){
@@ -1085,9 +1113,22 @@
 		// Limpar URL anterior
 		if (__previewUrl) { URL.revokeObjectURL(__previewUrl); __previewUrl = null; }
 
+		// Se for GitHub e tiver token, precisamos baixar o blob para preview de imagem/audio funcionar
+		if (gitHubRepoData && gitHubToken && ['png','jpg','jpeg','gif','webp','svg','mp3','wav','ogg','m4a'].includes(ext)) {
+			try {
+				const apiUrl = getGitHubApiContentUrl(path);
+				const res = await ghFetch(apiUrl, { headers: { 'Accept': 'application/vnd.github.raw' } });
+				if(res.ok) {
+					const blob = await res.blob();
+					__previewUrl = URL.createObjectURL(blob);
+				}
+			} catch(e) { console.error('Erro preview GH', e); }
+		}
+
 		if (['png','jpg','jpeg','gif','webp','svg'].includes(ext)) {
 			if(gitHubRepoData) {
-				const url = getGitHubRawUrl(path);
+				// Se conseguimos baixar o blob acima, usa ele. Se não, tenta raw url (funciona se publico)
+				const url = __previewUrl || getGitHubRawUrl(path);
 				content = `<img src="${url}" style="max-width:100%; max-height:180px; display:block; border-radius:4px;">`;
 			} else {
 				__previewUrl = URL.createObjectURL(file);
@@ -1095,7 +1136,7 @@
 			}
 		} else if (['mp3','wav','ogg','m4a'].includes(ext)) {
 			if(gitHubRepoData) {
-				const url = getGitHubRawUrl(path);
+				const url = __previewUrl || getGitHubRawUrl(path);
 				content = `<audio controls autoplay src="${url}" style="width:100%; height:32px;"></audio>`;
 			} else {
 				__previewUrl = URL.createObjectURL(file);
@@ -1891,11 +1932,17 @@
 
 			// Lazy Load para GitHub: se o arquivo estiver vazio (dummy), baixar conteúdo
 			if(gitHubRepoData && f.size === 0){
-				const rawUrl = getGitHubRawUrl(path);
+				// Alterado: Usar API de Contents com Header RAW para suportar repos privados
+				const apiUrl = getGitHubApiContentUrl(path);
 				try {
 					$('editor').value = 'Carregando do GitHub...';
 					renderPreviewFrom('Carregando...');
-					const res = await fetch(rawUrl);
+					
+					// Usa ghFetch para incluir token se existir
+					const res = await ghFetch(apiUrl, {
+						headers: { 'Accept': 'application/vnd.github.raw' }
+					});
+					
 					if(!res.ok) throw new Error('HTTP ' + res.status);
 					const txt = await res.text();
 					// Atualizar o arquivo no mapa com o conteúdo real
@@ -2063,13 +2110,18 @@
 				
 				try {
 					// 1. Obter info do repo para saber branch default
-					const infoRes = await fetch(`https://api.github.com/repos/${owner}/${repoName}`);
-					if(!infoRes.ok) throw new Error('Repositório não encontrado ou privado.');
+					// Alterado: usar ghFetch
+					const infoRes = await ghFetch(`https://api.github.com/repos/${owner}/${repoName}`);
+					if(!infoRes.ok) {
+						if(infoRes.status === 404) throw new Error('Repositório não encontrado ou acesso negado (verifique o Token).');
+						throw new Error('Erro API: ' + infoRes.status);
+					}
 					const info = await infoRes.json();
 					const branch = info.default_branch || 'main';
 
 					// 2. Obter árvore de arquivos recursiva
-					const treeRes = await fetch(`https://api.github.com/repos/${owner}/${repoName}/git/trees/${branch}?recursive=1`);
+					// Alterado: usar ghFetch
+					const treeRes = await ghFetch(`https://api.github.com/repos/${owner}/${repoName}/git/trees/${branch}?recursive=1`);
 					if(!treeRes.ok) throw new Error('Erro ao ler arquivos.');
 					const treeData = await treeRes.json();
 
@@ -2100,6 +2152,77 @@
 				}
 			});
 		}
+
+		// GitHub Login Logic
+		const ghLoginBtn = $('ghLoginBtn');
+		const ghLoginModal = $('ghLoginModal');
+		const ghLoginClose = $('ghLoginClose');
+		const ghLoginSave = $('ghLoginSave');
+		const ghLogoutBtn = $('ghLogoutBtn');
+		const ghTokenInput = $('ghTokenInput');
+
+		function updateGhLoginUI(){
+			if(gitHubToken){
+				ghLoginBtn.classList.add('logged-in');
+				ghLoginBtn.title = "Logado no GitHub";
+				ghLogoutBtn.style.display = 'block';
+				ghTokenInput.value = ''; // não mostrar token salvo por segurança visual
+				ghTokenInput.placeholder = 'Token salvo (oculto)';
+			} else {
+				ghLoginBtn.classList.remove('logged-in');
+				ghLoginBtn.title = "Configurar Token GitHub";
+				ghLogoutBtn.style.display = 'none';
+				ghTokenInput.placeholder = 'ghp_...';
+			}
+		}
+		
+		// Init UI
+		updateGhLoginUI();
+
+		if(ghLoginBtn) ghLoginBtn.addEventListener('click', ()=> {
+			ghLoginModal.classList.remove('hidden');
+			ghTokenInput.focus();
+		});
+		
+		if(ghLoginClose) ghLoginClose.addEventListener('click', ()=> ghLoginModal.classList.add('hidden'));
+		
+		if(ghLoginSave) ghLoginSave.addEventListener('click', async ()=>{
+			const val = ghTokenInput.value.trim();
+			if(!val && !gitHubToken) return alert('Insira um token.');
+			
+			if(val){
+				// Validar token simples (chamada user)
+				try {
+					ghLoginSave.textContent = 'Verificando...';
+					const res = await fetch('https://api.github.com/user', {
+						headers: { 'Authorization': `Bearer ${val}` }
+					});
+					if(!res.ok) throw new Error('Token inválido');
+					const user = await res.json();
+					
+					gitHubToken = val;
+					localStorage.setItem('ez2_gh_token', val);
+					updateGhLoginUI();
+					ghLoginModal.classList.add('hidden');
+					alert(`Logado como: ${user.login}`);
+				} catch(e) {
+					alert('Erro ao validar token: ' + e.message);
+				} finally {
+					ghLoginSave.textContent = 'Salvar Token';
+				}
+			} else {
+				ghLoginModal.classList.add('hidden');
+			}
+		});
+
+		if(ghLogoutBtn) ghLogoutBtn.addEventListener('click', ()=>{
+			if(confirm('Remover token salvo?')){
+				gitHubToken = null;
+				localStorage.removeItem('ez2_gh_token');
+				updateGhLoginUI();
+				ghLoginModal.classList.add('hidden');
+			}
+		});
 
 		// open folder (input fallback)
 		folderInput.addEventListener('change', (e)=>{
