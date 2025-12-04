@@ -296,12 +296,26 @@
 
 	// Novo helper para processar mídia em qualquer container
 	function processMedia(root){
-		[...root.querySelectorAll('img')].forEach(img=>{
+		[...root.querySelectorAll('img')].forEach(async img=>{
 			const src = img.getAttribute('src')||'';
 			const resolved = resolveMedia(src);
 			if(resolved && allFiles.has(resolved)){
 				if(gitHubRepoData){
-					img.src = getGitHubRawUrl(resolved);
+					if(gitHubToken){
+						// Repositório privado: baixar blob via API autenticada
+						try {
+							const apiUrl = getGitHubApiContentUrl(resolved);
+							const res = await ghFetch(apiUrl, { headers: { 'Accept': 'application/vnd.github.raw' } });
+							if(res.ok){
+								const blob = await res.blob();
+								const url = URL.createObjectURL(blob);
+								objectUrlMap.set(resolved, url);
+								img.src = url;
+							}
+						} catch(e){ console.error('Erro img GH', e); }
+					} else {
+						img.src = getGitHubRawUrl(resolved);
+					}
 					if(!img.dataset.srcOriginal) img.dataset.srcOriginal = src;
 					img.contentEditable = 'false';
 				} else {
@@ -311,7 +325,7 @@
 				}
 			}
 		});
-		[...root.querySelectorAll('audio')].forEach(a=>{
+		[...root.querySelectorAll('audio')].forEach(async a=>{
 			const src = a.getAttribute('src')||'';
 
 			// Se áudio estiver desativado, substituir por placeholder e não carregar blob
@@ -327,7 +341,21 @@
 			const resolved = resolveMedia(src);
 			if(resolved && allFiles.has(resolved)){
 				if(gitHubRepoData){
-					a.src = getGitHubRawUrl(resolved);
+					if(gitHubToken){
+						// Repositório privado: baixar blob via API autenticada
+						try {
+							const apiUrl = getGitHubApiContentUrl(resolved);
+							const res = await ghFetch(apiUrl, { headers: { 'Accept': 'application/vnd.github.raw' } });
+							if(res.ok){
+								const blob = await res.blob();
+								const url = URL.createObjectURL(blob);
+								objectUrlMap.set(resolved, url);
+								a.src = url;
+							}
+						} catch(e){ console.error('Erro audio GH', e); }
+					} else {
+						a.src = getGitHubRawUrl(resolved);
+					}
 					if(!a.dataset.srcOriginal) a.dataset.srcOriginal = src;
 					a.contentEditable = 'false'; a.controls = true;
 				} else {
